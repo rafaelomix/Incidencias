@@ -101,7 +101,10 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbyoBkNx1Iq5DIOuwCHrksKphf
 // ======================= ESTADO Y UTILIDADES =======================
 var ESTADOS = ['ACTIVA','GESTIONADA','TERMINADA'];
 var NOM_EST = {ACTIVA:'Activa', GESTIONADA:'Gestionada', TERMINADA:'Terminada'};
-var S = { ses:null, usuario:null, pila:[], promo:null, piso:null, filtro:'', cacheFotos:{}, cache:{}, vista:'' };
+var S = { ses:null, usuario:null, pila:[], promo:null, piso:null, filtro:'', cacheFotos:{}, cache:{}, vista:'',
+          pendientes:[], comPend:{}, enviando:0 };
+// Avisa si se intenta cerrar la app mientras algo se está guardando
+window.addEventListener('beforeunload', function(e){ if(S.enviando > 0){ e.preventDefault(); e.returnValue = ''; } });
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -386,11 +389,23 @@ function abrirTodas(){
 
 function cargarIncidencias(clave, fn, args, conPiso, conPromo){
   S.incConPiso = conPiso; S.incConPromo = conPromo;
+  S.ctxInc = { promo: conPromo ? '' : S.promo.nombre, piso: conPiso ? '' : S.piso.nombre };
   cargarCon(clave, fn, args, function(l){ S.listaInc = l; pintarIncidencias(); });
+}
+
+// Incidencias que se están guardando en segundo plano y tocan a esta lista
+function pendientesDeLista(){
+  var c = S.ctxInc || {};
+  return S.pendientes.filter(function(p){ return (!c.promo || p.promocion === c.promo) && (!c.piso || p.piso === c.piso); });
 }
 
 function pintarIncidencias(){
   var l = S.listaInc || [];
+  var pend = pendientesDeLista().map(function(p){
+    return '<div class="card item b-ACTIVA" style="opacity:.75"><div class="grow"><div class="tit">'+esc(p.descripcion || '(sin texto)')+'</div>'+
+      '<div class="sub">'+esc(p.piso)+' · '+(p.nFotos?'&#128247; '+p.nFotos+' · ':'')+'guardando...</div></div>'+
+      '<span class="chip ch-GESTIONADA">&#9203; Enviando</span></div>';
+  }).join('');
   var c = {ACTIVA:0,GESTIONADA:0,TERMINADA:0};
   l.forEach(function(i){ c[i.estado]++; });
   var f = '<div class="filtros"><button class="'+(!S.filtro?'on':'')+'" onclick="filtrar(\'\')">Todas ('+l.length+')</button>';
@@ -400,9 +415,9 @@ function pintarIncidencias(){
   if(S.incConPiso){
     f += '<div class="filtros"><button class="'+(S.modoInc==='pisos'?'on':'')+'" onclick="modoInc(\'pisos\')">&#127970; Por pisos</button>'+
          '<button class="'+(S.modoInc==='lista'?'on':'')+'" onclick="modoInc(\'lista\')">&#9776; Lista</button></div>';
-    if(S.modoInc === 'pisos'){ $('listaInc').innerHTML = f + pisosConIncidencias(v); return; }
+    if(S.modoInc === 'pisos'){ $('listaInc').innerHTML = f + pend + pisosConIncidencias(v); return; }
   }
-  $('listaInc').innerHTML = f + (v.length ? v.map(function(i){
+  $('listaInc').innerHTML = f + pend + (v.length ? v.map(function(i){
     return '<div class="card item b-'+i.estado+'" onclick="abrirIncidencia(\''+i.id+'\')"><div class="grow">'+
       '<div class="tit">'+esc(i.descripcion || '(sin texto)')+'</div>'+
       '<div class="sub">'+(S.incConPromo?esc(i.promocion)+' · ':'')+(S.incConPiso?esc(i.piso)+' · ':'')+esc(i.usuario)+' · '+esc(i.fecha)+'</div>'+
@@ -464,6 +479,8 @@ function verPdf(id){
 // ======================= NUEVA INCIDENCIA =======================
 function nuevaIncidencia(){
   S.fotosNuevas = [];
+  var bor = S.borrador && S.borrador.promocion === S.promo.nombre && S.borrador.piso === S.piso.nombre ? S.borrador : null;
+  if(bor){ S.fotosNuevas = bor.fotos.slice(); S.borrador = null; }
   ir('nueva', 'Nueva incidencia', function(){
     $('app').innerHTML = '<div class="card"><div class="sub">'+esc(S.promo.nombre)+' · '+esc(S.piso.nombre)+'</div>'+
       '<label>Descripción de la incidencia</label><textarea id="nDesc" placeholder="¿Qué pasa? ¿Dónde?"></textarea>'+
@@ -472,6 +489,7 @@ function nuevaIncidencia(){
       (S.piso.id?'<button class="btn sec" onclick="marcarPlano(S.piso.id,function(d){S.fotosNuevas.push(d);pintarFotosNuevas(\'nFotos\',S.fotosNuevas);})">&#128208; Marcar en el plano</button>':'')+'</div>'+
       '<div style="margin-top:16px"><button class="btn" style="width:100%" onclick="enviarIncidencia()">Guardar incidencia</button></div></div>';
     pintarFotosNuevas('nFotos', S.fotosNuevas);
+    if(bor){ $('nDesc').value = bor.descripcion; toast('Borrador recuperado'); }
   });
 }
 
@@ -492,11 +510,11 @@ function miniatura(dataUrl){
   return new Promise(function(ok){
     var img = new Image();
     img.onload = function(){
-      var e = Math.min(1, 360 / Math.max(img.width, img.height));
+      var e = Math.min(1, 300 / Math.max(img.width, img.height));
       var c = document.createElement('canvas');
       c.width = Math.round(img.width*e); c.height = Math.round(img.height*e);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      ok(c.toDataURL('image/jpeg', 0.6));
+      ok(c.toDataURL('image/jpeg', 0.55));
     };
     img.onerror = function(){ ok(''); };
     img.src = dataUrl;
@@ -504,15 +522,11 @@ function miniatura(dataUrl){
 }
 
 // Sube todas las fotos a la vez (en paralelo)
-function subirFotos(lista){
+function subirFotos(lista, promo){
   if(!lista.length) return Promise.resolve([]);
-  var hechas = 0;
-  cargando(true, 'Subiendo fotos (0 de '+lista.length+')...');
-  var promo = S.promo ? S.promo.nombre : 'General';
   return Promise.all(lista.map(function(d){
     return miniatura(d).then(function(mini){
       return run('subirFoto', S.ses, promo, d, mini).then(function(id){
-        hechas++; $('cargaTxt').textContent = 'Subiendo fotos ('+hechas+' de '+lista.length+')...';
         if(mini && m2(id)) S.cacheFotos[m2(id)] = mini;   // la miniatura ya la tenemos: no hace falta descargarla
         return id;
       });
@@ -521,16 +535,36 @@ function subirFotos(lista){
 }
 function m2(id){ return String(id).split(':')[1] || ''; }
 
+// Se vuelve a la lista al momento y la incidencia se guarda en segundo plano
 function enviarIncidencia(){
   var desc = $('nDesc').value.trim();
-  if(!desc && !S.fotosNuevas.length){ alert('Escribe una descripción o añade una foto.'); return; }
-  subirFotos(S.fotosNuevas).then(function(ids){
-    cargando(true,'Guardando incidencia...');
-    return run('crearIncidencia', S.ses, {promocion:S.promo.nombre, piso:S.piso.nombre, pisoId:S.piso.id, descripcion:desc, fotos:ids});
-  }).then(function(id){
-    cargando(false); olvidar(); toast('Incidencia '+id+' guardada');
-    S.pila.pop(); pintar();
-  }).catch(fallo);
+  var fotos = S.fotosNuevas.slice();
+  if(!desc && !fotos.length){ alert('Escribe una descripción o añade una foto.'); return; }
+  var p = { promocion:S.promo.nombre, piso:S.piso.nombre, pisoId:S.piso.id, descripcion:desc, nFotos:fotos.length };
+  S.pendientes.unshift(p);
+  S.enviando++;
+  S.fotosNuevas = [];
+  S.pila.pop(); pintar();
+  toast('Guardando incidencia...');
+  subirFotos(fotos, p.promocion).then(function(ids){
+    return run('crearIncidencia', S.ses, { promocion:p.promocion, piso:p.piso, pisoId:p.pisoId, descripcion:desc, fotos:ids });
+  }).then(function(inc){
+    S.enviando--;
+    S.pendientes.splice(S.pendientes.indexOf(p), 1);
+    var clave = 'inc:'+p.promocion+'|'+p.piso;
+    S.cache[clave] = [inc].concat(S.cache[clave] || []);
+    S.cache['ver:'+inc.id] = inc; inc.listaComentarios = [];
+    delete S.cache['inc:'+p.promocion]; delete S.cache['inc:todas']; delete S.cache['promos'];
+    toast('Incidencia '+inc.id+' guardada');
+    if(S.vista === clave){ S.listaInc = S.cache[clave]; pintarIncidencias(); }
+    else if(S.vista.indexOf('inc:') === 0) recargar();
+  }).catch(function(m){
+    S.enviando--;
+    S.pendientes.splice(S.pendientes.indexOf(p), 1);
+    if(S.vista.indexOf('inc:') === 0) pintarIncidencias();
+    S.borrador = { promocion:p.promocion, piso:p.piso, descripcion:desc, fotos:fotos };
+    alert('No se pudo guardar la incidencia ('+m+').\n\nSe ha guardado como borrador: pulsa "+ Nueva incidencia" en ese piso para volver a enviarla.');
+  });
 }
 
 // ======================= DETALLE DE INCIDENCIA =======================
@@ -565,6 +599,10 @@ function pintarIncidencia(i){
        '<div>'+nl(i.descripcion)+'</div>'+fotosRemotas(i.fotos)+'</div>';
   h += i.listaComentarios.map(function(c){
     return '<div class="com"><div class="q">'+esc(c.usuario)+' · '+esc(c.fecha)+'</div><div>'+nl(c.texto)+'</div>'+fotosRemotas(c.fotos)+'</div>';
+  }).join('');
+  h += (S.comPend[i.id] || []).map(function(c){
+    return '<div class="com" style="opacity:.7"><div class="q">'+esc(S.usuario.nombre)+' · &#9203; guardando...</div><div>'+nl(c.texto)+'</div>'+
+           (c.fotos.length ? '<div class="fotos">'+c.fotos.map(function(d){ return '<div class="f"><img src="'+d+'"></div>'; }).join('')+'</div>' : '')+'</div>';
   }).join('');
   h += '<label>Añadir comentario o fotos</label><textarea id="cTxt"></textarea><div class="fotos" id="cFotos"></div>'+
        '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128247; Foto</button>'+
@@ -614,13 +652,35 @@ function verFotoGrande(id, mini){
   }).catch(function(){});
 }
 
+// El comentario aparece al momento en el historial y se guarda en segundo plano
 function enviarComentario(){
   var t = $('cTxt').value.trim();
-  if(!t && !S.fotosCom.length){ alert('Escribe un comentario o añade una foto.'); return; }
-  subirFotos(S.fotosCom).then(function(ids){
-    cargando(true,'Enviando...');
-    return run('comentar', S.ses, S.inc.id, t, ids);
-  }).then(function(i){ cargando(false); olvidar(); S.fotosCom=[]; S.cache['ver:'+i.id]=i; $('cTxt').value=''; toast('Comentario añadido'); pintarIncidencia(i); }).catch(fallo);
+  var fotos = S.fotosCom.slice();
+  if(!t && !fotos.length){ alert('Escribe un comentario o añade una foto.'); return; }
+  var inc = S.inc, id = inc.id;
+  var c = { texto:t, fotos:fotos };
+  (S.comPend[id] = S.comPend[id] || []).push(c);
+  S.enviando++;
+  S.fotosCom = []; $('cTxt').value = '';
+  pintarIncidencia(inc);
+  subirFotos(fotos, inc.promocion).then(function(ids){
+    return run('comentar', S.ses, id, t, ids);
+  }).then(function(i){
+    S.enviando--;
+    S.comPend[id].splice(S.comPend[id].indexOf(c), 1);
+    S.cache['ver:'+id] = i;
+    delete S.cache['inc:'+i.promocion+'|'+i.piso]; delete S.cache['inc:'+i.promocion]; delete S.cache['inc:todas'];
+    toast('Comentario guardado');
+    if(S.vista === 'ver:'+id) pintarIncidencia(i);
+  }).catch(function(m){
+    S.enviando--;
+    S.comPend[id].splice(S.comPend[id].indexOf(c), 1);
+    if(S.vista === 'ver:'+id){
+      pintarIncidencia(S.inc);
+      $('cTxt').value = t; S.fotosCom = fotos; pintarFotosNuevas('cFotos', S.fotosCom);
+    }
+    alert('No se pudo guardar el comentario ('+m+'). Se ha dejado en la caja para volver a enviarlo.');
+  });
 }
 
 function cambiarEstado(e){
@@ -640,7 +700,9 @@ function verGrande(src){
 }
 
 // ======================= FOTOS: ELEGIR Y DIBUJAR =======================
-var MAX_LADO = 1400;   // tamaño de las fotos (px): suficiente y más rápido de subir
+var MAX_LADO = 1200;      // tamaño de las fotos (px)
+var CALIDAD_FOTO = 0.68;  // calidad JPEG de las fotos (0-1)
+var CALIDAD_PLANO = 0.78; // calidad JPEG de los planos marcados
 
 function elegirFoto(alTerminar){
   var inp = $('archivoFoto');
@@ -655,6 +717,8 @@ function elegirFoto(alTerminar){
   inp.click();
 }
 
+// Editor de fotos y planos: mover/zoom (dos dedos o rueda), lápiz y texto.
+// Con el plano empieza en "Mover" para poder ampliar antes de dibujar.
 function editorFoto(src, alTerminar, maxLado){
   var img = new Image();
   img.onload = function(){
@@ -663,23 +727,56 @@ function editorFoto(src, alTerminar, maxLado){
     var m = document.createElement('div');
     m.className = 'modal';
     var colores = ['#ff0000','#ffd400','#00a2ff','#00c853','#000000','#ffffff'];
+    var inicial = maxLado ? 'mover' : 'lapiz';
     m.innerHTML = '<div class="barra">'+
+      '<button data-h="mover"'+(inicial==='mover'?' class="on"':'')+'>&#9995; Mover</button>'+
+      '<button data-h="lapiz"'+(inicial==='lapiz'?' class="on"':'')+'>&#9999;&#65039; Lápiz</button>'+
+      '<button data-h="texto">T Texto</button>'+
+      '<button id="eMas">+</button><button id="eMenos">&minus;</button><button id="eAjustar">Ajustar</button>'+
+      '</div><div class="barra">'+
       colores.map(function(c,k){ return '<button class="color'+(k===0?' on':'')+'" data-c="'+c+'" style="background:'+c+'"></button>'; }).join('')+
-      '<button data-h="lapiz" class="on">&#9999;&#65039; Lápiz</button><button data-h="texto">T Texto</button>'+
       '<button data-g="4">Fino</button><button data-g="9" class="on">Medio</button><button data-g="18">Grueso</button>'+
+      '</div><div class="barra">'+
       '<button id="eDesh">Deshacer</button><button id="eBorrar">Borrar todo</button><span class="sep"></span>'+
-      '<button id="eCanc">Cancelar</button><button id="eOk" style="background:#2e75b6">Usar foto</button></div>'+
-      '<div class="lienzo"><canvas></canvas></div>';
+      '<button id="eCanc">Cancelar</button><button id="eOk" style="background:#2e75b6">Usar</button></div>'+
+      '<div class="lienzo" style="position:relative;overflow:hidden;touch-action:none;display:block;padding:0"><canvas></canvas></div>';
     document.body.appendChild(m);
+    var caja = m.querySelector('.lienzo');
     var cv = m.querySelector('canvas'), cx = cv.getContext('2d');
     cv.width = W; cv.height = Hh;
-    var trazos = [], actual = null, color = colores[0], grosor = 9, herramienta = 'lapiz';
+    cv.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;max-height:none;touch-action:none';
+    var trazos = [], actual = null, color = colores[0], grosor = 9, herramienta = inicial;
     var k = Math.max(1, W/1000);
+
+    // ---------- vista: tamaño base ajustado a la pantalla + zoom (z) y desplazamiento (tx, ty)
+    var base = 1, z = 1, tx = 0, ty = 0;
+    function ajustar(){
+      var cw = caja.clientWidth, ch = caja.clientHeight;
+      base = Math.min(cw / W, ch / Hh);
+      cv.style.width = (W*base)+'px'; cv.style.height = (Hh*base)+'px';
+      z = 1; tx = (cw - W*base)/2; ty = (ch - Hh*base)/2;
+      aplicar();
+    }
+    function aplicar(){
+      var cw = caja.clientWidth, ch = caja.clientHeight, w = W*base*z, h = Hh*base*z;
+      // que la imagen no se escape de la pantalla
+      tx = w <= cw ? (cw - w)/2 : Math.min(0, Math.max(cw - w, tx));
+      ty = h <= ch ? (ch - h)/2 : Math.min(0, Math.max(ch - h, ty));
+      cv.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+z+')';
+    }
+    function zoomEn(nz, px, py){        // zoom manteniendo fijo el punto (px, py) de la pantalla
+      nz = Math.max(1, Math.min(10, nz));
+      var r = caja.getBoundingClientRect(), x = px - r.left, y = py - r.top;
+      tx = x - (x - tx) * nz / z; ty = y - (y - ty) * nz / z; z = nz;
+      aplicar();
+    }
+
+    // ---------- dibujo
     function pintarTexto(t){
-      var tam = Math.round((18 + t.g*3) * k);
+      var tam = t.tam || Math.round((18 + t.g*3) * k);
       cx.font = 'bold '+tam+'px Arial, sans-serif';
       cx.textBaseline = 'middle';
-      cx.lineWidth = Math.max(3, tam/6);
+      cx.lineWidth = Math.max(2, tam/6);
       cx.strokeStyle = (t.c === '#ffffff' || t.c === '#ffd400') ? '#000000' : '#ffffff';
       t.s.split('\n').forEach(function(linea, n){
         cx.strokeText(linea, t.x, t.y + n*tam*1.15);
@@ -692,9 +789,9 @@ function editorFoto(src, alTerminar, maxLado){
       cx.lineCap = 'round'; cx.lineJoin = 'round';
       trazos.forEach(function(t){
         if(t.s !== undefined){ pintarTexto(t); return; }
-        cx.strokeStyle = t.c; cx.lineWidth = t.g * Math.max(1, W/1000);
+        cx.strokeStyle = t.c; cx.lineWidth = t.w;
         cx.beginPath();
-        t.p.forEach(function(p,k){ if(k===0) cx.moveTo(p[0],p[1]); else cx.lineTo(p[0],p[1]); });
+        t.p.forEach(function(p,n){ if(n===0) cx.moveTo(p[0],p[1]); else cx.lineTo(p[0],p[1]); });
         if(t.p.length===1) cx.lineTo(t.p[0][0]+0.1, t.p[0][1]+0.1);
         cx.stroke();
       });
@@ -703,46 +800,87 @@ function editorFoto(src, alTerminar, maxLado){
       var r = cv.getBoundingClientRect();
       return [ (ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * Hh / r.height ];
     }
-    cv.addEventListener('pointerdown', function(ev){
+    // el grosor en pantalla es el mismo con o sin zoom (al ampliar se dibuja más fino y preciso)
+    function grosorActual(){ return Math.max(1, grosor * k / z); }
+
+    // ---------- gestos: 1 dedo = herramienta; 2 dedos = zoom y mover siempre
+    var dedos = {}, gesto = null, arrastre = null;
+    function nDedos(){ return Object.keys(dedos).length; }
+    function dosDedos(){
+      var l = Object.keys(dedos).map(function(id){ return dedos[id]; });
+      var dx = l[0].x - l[1].x, dy = l[0].y - l[1].y;
+      return { d: Math.sqrt(dx*dx + dy*dy) || 1, x: (l[0].x + l[1].x)/2, y: (l[0].y + l[1].y)/2 };
+    }
+    caja.addEventListener('pointerdown', function(ev){
       ev.preventDefault();
-      if(herramienta === 'texto'){
-        var pt = punto(ev);
-        var txt = prompt('Texto a escribir:', '');
-        if(txt){ trazos.push({c:color, g:grosor, x:pt[0], y:pt[1], s:txt}); redibujar(); }
+      caja.setPointerCapture(ev.pointerId);
+      dedos[ev.pointerId] = {x:ev.clientX, y:ev.clientY};
+      if(nDedos() === 2){
+        if(actual){ trazos.pop(); actual = null; redibujar(); }   // el segundo dedo cancela el trazo
+        arrastre = null;
+        var g = dosDedos(); gesto = { d0:g.d, z0:z, x:g.x, y:g.y };
         return;
       }
-      cv.setPointerCapture(ev.pointerId); actual = {c:color, g:grosor, p:[punto(ev)]}; trazos.push(actual); redibujar();
+      if(nDedos() > 2) return;
+      if(herramienta === 'mover'){ arrastre = { x:ev.clientX, y:ev.clientY, tx:tx, ty:ty }; return; }
+      if(herramienta === 'texto'){
+        var pt = punto(ev);
+        delete dedos[ev.pointerId];
+        var txt = prompt('Texto a escribir:', '');
+        if(txt) { trazos.push({c:color, g:grosor, tam:Math.round(Math.max(10, (18 + grosor*3) * k / z)), x:pt[0], y:pt[1], s:txt}); redibujar(); }
+        return;
+      }
+      actual = {c:color, w:grosorActual(), p:[punto(ev)]}; trazos.push(actual); redibujar();
     });
-    cv.addEventListener('pointermove', function(ev){
-      if(!actual) return;
+    caja.addEventListener('pointermove', function(ev){
+      if(!dedos[ev.pointerId]) return;
       ev.preventDefault();
+      dedos[ev.pointerId] = {x:ev.clientX, y:ev.clientY};
+      if(gesto && nDedos() >= 2){
+        var g = dosDedos();
+        tx += g.x - gesto.x; ty += g.y - gesto.y;        // mover con los dos dedos
+        gesto.x = g.x; gesto.y = g.y;
+        zoomEn(gesto.z0 * g.d / gesto.d0, g.x, g.y);       // pellizco
+        return;
+      }
+      if(arrastre){ tx = arrastre.tx + ev.clientX - arrastre.x; ty = arrastre.ty + ev.clientY - arrastre.y; aplicar(); return; }
+      if(!actual) return;
       var a = actual.p[actual.p.length-1], b = punto(ev);
       actual.p.push(b);
-      // dibuja solo el tramo nuevo (más fluido en el móvil)
-      cx.strokeStyle = actual.c; cx.lineWidth = actual.g * Math.max(1, W/1000);
+      cx.strokeStyle = actual.c; cx.lineWidth = actual.w;
       cx.lineCap = 'round'; cx.lineJoin = 'round';
       cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke();
     });
-    var fin = function(){ actual = null; };
-    cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
-    Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(b){
-      b.onclick = function(){ color = b.getAttribute('data-c'); Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
-    });
-    Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(b){
-      b.onclick = function(){ grosor = +b.getAttribute('data-g'); Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
-    });
-    Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(b){
-      b.onclick = function(){ herramienta = b.getAttribute('data-h'); Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
-    });
+    function soltar(ev){
+      delete dedos[ev.pointerId];
+      if(nDedos() < 2) gesto = null;
+      if(nDedos() === 0){ actual = null; arrastre = null; }
+    }
+    caja.addEventListener('pointerup', soltar);
+    caja.addEventListener('pointercancel', soltar);
+    caja.addEventListener('wheel', function(ev){ ev.preventDefault(); zoomEn(z * (ev.deltaY < 0 ? 1.2 : 1/1.2), ev.clientX, ev.clientY); }, {passive:false});
+
+    // ---------- botones
+    function marcar(sel, b){ Array.prototype.forEach.call(m.querySelectorAll(sel), function(x){ x.classList.remove('on'); }); b.classList.add('on'); }
+    Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(b){ b.onclick = function(){ color = b.getAttribute('data-c'); marcar('[data-c]', b); }; });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(b){ b.onclick = function(){ grosor = +b.getAttribute('data-g'); marcar('[data-g]', b); }; });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(b){ b.onclick = function(){ herramienta = b.getAttribute('data-h'); marcar('[data-h]', b); }; });
+    function centro(){ var r = caja.getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }
+    m.querySelector('#eMas').onclick = function(){ var c = centro(); zoomEn(z*1.5, c[0], c[1]); };
+    m.querySelector('#eMenos').onclick = function(){ var c = centro(); zoomEn(z/1.5, c[0], c[1]); };
+    m.querySelector('#eAjustar').onclick = ajustar;
     m.querySelector('#eDesh').onclick = function(){ trazos.pop(); redibujar(); };
     m.querySelector('#eBorrar').onclick = function(){ if(confirm('¿Borrar todo lo dibujado?')){ trazos = []; redibujar(); } };
-    m.querySelector('#eCanc').onclick = function(){ document.body.removeChild(m); };
+    m.querySelector('#eCanc').onclick = function(){ window.removeEventListener('resize', ajustar); document.body.removeChild(m); };
     m.querySelector('#eOk').onclick = function(){
-      var d = cv.toDataURL('image/jpeg', maxLado ? 0.85 : 0.78);
+      var d = cv.toDataURL('image/jpeg', maxLado ? CALIDAD_PLANO : CALIDAD_FOTO);
+      window.removeEventListener('resize', ajustar);
       document.body.removeChild(m);
       alTerminar(d);
     };
+    window.addEventListener('resize', ajustar);
     redibujar();
+    ajustar();
   };
   img.onerror = function(){ alert('No se pudo abrir la imagen.'); };
   img.src = src;
@@ -751,7 +889,7 @@ function editorFoto(src, alTerminar, maxLado){
 // ======================= DIBUJAR SOBRE EL PLANO (PDF) =======================
 // pdf.js (versión "legacy", compatible con móviles algo antiguos), cargado solo cuando hace falta
 var PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
-var LADO_PLANO = 2400;   // resolución de la imagen del plano
+var LADO_PLANO = 2000;   // resolución de la imagen del plano
 
 function cargarPdfJs(){
   if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
@@ -793,7 +931,7 @@ function marcarPlano(idPdf, alTerminar){
     cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
     var cx = cv.getContext('2d');
     cx.fillStyle = '#ffffff'; cx.fillRect(0,0,cv.width,cv.height);
-    return pag.render({canvasContext:cx, viewport:vp}).promise.then(function(){ return cv.toDataURL('image/jpeg', 0.9); });
+    return pag.render({canvasContext:cx, viewport:vp}).promise.then(function(){ return cv.toDataURL('image/jpeg', 0.85); });
   }).then(function(imagen){
     cargando(false);
     if(imagen) editorFoto(imagen, alTerminar, LADO_PLANO);
