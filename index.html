@@ -14,7 +14,7 @@
 <style>
   :root{
     --azul:#1f4e79; --azul2:#2e75b6; --fondo:#f2f4f7; --linea:#d9dee5; --texto:#1d2733; --gris:#6b7684;
-    --activa:#d93025; --activa-f:#fce8e6; --gest:#e8a200; --gest-f:#fff4d6; --term:#188038; --term-f:#e6f4ea;
+    --activa:#d93025; --activa-f:#fce8e6; --gest:#f57c00; --gest-f:#fde8d4; --term:#188038; --term-f:#e6f4ea;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--fondo);color:var(--texto);font-size:16px}
@@ -32,17 +32,22 @@
   .chips{display:flex;gap:4px;flex-wrap:wrap}
   .chip{border-radius:20px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
   .ch-ACTIVA{background:var(--activa-f);color:var(--activa)}
-  .ch-GESTIONADA{background:var(--gest-f);color:#9a6b00}
+  .ch-GESTIONADA{background:var(--gest-f);color:#b45309}
   .ch-TERMINADA{background:var(--term-f);color:var(--term)}
   .b-ACTIVA{border-left:6px solid var(--activa)}
   .b-GESTIONADA{border-left:6px solid var(--gest)}
   .b-TERMINADA{border-left:6px solid var(--term)}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:11px 14px;font-size:15px;font-weight:600;background:var(--azul2);color:#fff;cursor:pointer}
+  a.btn{text-decoration:none}
   .btn.sec{background:#e8eef6;color:var(--azul)}
   .btn.peq{padding:7px 10px;font-size:13px}
   .btn:disabled{opacity:.5}
   .btn.e-ACTIVA{background:var(--activa)} .btn.e-GESTIONADA{background:var(--gest)} .btn.e-TERMINADA{background:var(--term)}
   .fila{display:flex;gap:8px;flex-wrap:wrap}
+  .punto{width:14px;height:14px;border-radius:50%;flex:none;background:#c9d1db}
+  .p-ACTIVA{background:var(--activa)} .p-GESTIONADA{background:var(--gest)} .p-TERMINADA{background:var(--term)}
+  .grupo{margin:16px 4px 6px;font-weight:700;color:var(--azul)}
+  .btn.verde{background:var(--term)}
   .fila .btn{flex:1}
   input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--linea);border-radius:8px;background:#fff;font-family:inherit}
   textarea{min-height:90px;resize:vertical}
@@ -65,7 +70,7 @@
   @keyframes g{to{transform:rotate(360deg)}}
   #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;display:none;z-index:60;max-width:90%}
   /* modales */
-  .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:40;display:flex;flex-direction:column}
+  .modal{position:fixed;inset:0;background:#111;z-index:40;display:flex;flex-direction:column}
   .modal .barra{display:flex;gap:6px;padding:8px;background:#111;flex-wrap:wrap;align-items:center}
   .modal .barra button{background:#333;color:#fff;border:0;border-radius:8px;padding:8px 10px;font-size:14px}
   .modal .barra button.on{outline:2px solid #fff}
@@ -90,7 +95,7 @@
 <script>
 // ======================= CONFIGURACIÓN =======================
 // Pega aquí la URL de tu script de Google (Implementar > Gestionar implementaciones), la que acaba en /exec
-var API_URL = 'https://script.google.com/macros/s/AKfycbyoBkNx1Iq5DIOuwCHrksKphfwh8cl7xxLPy6qK5PTY7g4m4mKX592hhXKp23umJ6w7/exec';
+var API_URL = 'PEGA_AQUI_LA_URL_DEL_SCRIPT/exec';
 
 // ======================= ESTADO Y UTILIDADES =======================
 var ESTADOS = ['ACTIVA','GESTIONADA','TERMINADA'];
@@ -219,41 +224,89 @@ function abrirPromo(id){
   ir('promo', p ? p.nombre : 'Promoción', function(){ vistaPromo(id); });
 }
 
+function enlacesMapa(i){
+  var gps = (i.gps||'').replace(/\s/g,'');
+  var destino = gps || (i.direccion||'').trim();
+  if(!destino) return '';
+  var q = encodeURIComponent(destino);
+  return '<a class="btn sec peq" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+q+'">Ver en Maps</a>'+
+         '<a class="btn peq" target="_blank" href="https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='+q+'">&#129517; Cómo llegar</a>';
+}
+function botonLlamar(tel){
+  tel = (tel||'').replace(/[^0-9+]/g,'');
+  return tel ? '<a class="btn verde peq" href="tel:'+tel+'">&#128222; Llamar</a>' : '';
+}
+
 function vistaPromo(id){
   cargando(true);
   run('getPromocion', S.ses, id).then(function(p){
     cargando(false);
     S.promo = p;
+    if(!S.filtroPisos) S.filtroPisos = '';
     var i = p.info || {};
-    var gps = (i.gps||'').replace(/\s/g,'');
-    var mapa = gps ? '<a class="btn sec peq" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(gps)+'">Abrir en Maps</a>' : '';
+    var mapa = enlacesMapa(i);
     var h = '<div class="card"><details '+(esAdmin() && !i.codigo ? 'open':'')+'><summary>Detalles de la promoción</summary>';
     if(esAdmin()){
       h += '<label>Código de obra</label><input id="pCod" value="'+esc(i.codigo)+'">'+
            '<label>Jefe de obra</label><input id="pJefe" value="'+esc(i.jefe)+'">'+
+           '<label>Teléfono del jefe de obra</label><div class="fila"><input id="pTel" type="tel" style="flex:2" value="'+esc(i.telefono)+'">'+botonLlamar(i.telefono)+'</div>'+
            '<label>Ubicación GPS (lat, lng)</label><div class="fila"><input id="pGps" style="flex:2" value="'+esc(i.gps)+'" placeholder="42.8125, -1.6458">'+
            '<button class="btn sec peq" onclick="miUbicacion()">Mi ubicación</button></div>'+
            '<label>Dirección</label><input id="pDir" value="'+esc(i.direccion)+'">'+
            '<label>Notas</label><textarea id="pNotas">'+esc(i.notas)+'</textarea>'+
-           '<div class="fila" style="margin-top:10px"><button class="btn" onclick="guardarPromo()">Guardar detalles</button>'+mapa+'</div>';
+           '<div class="fila" style="margin-top:10px"><button class="btn" onclick="guardarPromo()">Guardar detalles</button></div>'+
+           (mapa?'<div class="fila" style="margin-top:8px">'+mapa+'</div>':'');
       if(i.actualizado) h += '<div class="sub" style="margin-top:6px">Actualizado '+esc(i.actualizado)+' por '+esc(i.por)+'</div>';
     } else {
       h += '<div class="sub" style="margin-top:6px">Código de obra</div><div>'+(esc(i.codigo)||'—')+'</div>'+
-           '<div class="sub" style="margin-top:6px">Jefe de obra</div><div>'+(esc(i.jefe)||'—')+'</div>'+
+           '<div class="sub" style="margin-top:6px">Jefe de obra</div><div class="fila" style="align-items:center"><span class="grow">'+(esc(i.jefe)||'—')+
+             (i.telefono?' · '+esc(i.telefono):'')+'</span>'+botonLlamar(i.telefono)+'</div>'+
            '<div class="sub" style="margin-top:6px">Dirección</div><div>'+(esc(i.direccion)||'—')+'</div>'+
-           '<div class="sub" style="margin-top:6px">Ubicación</div><div>'+(gps?mapa:'—')+'</div>'+
+           '<div class="sub" style="margin-top:6px">Ubicación</div><div class="fila">'+(mapa||'—')+'</div>'+
            (i.notas?'<div class="sub" style="margin-top:6px">Notas</div><div>'+nl(i.notas)+'</div>':'');
     }
     h += '</details></div>';
     h += '<div class="card"><div class="tit">Incidencias de la promoción</div><div style="margin-top:6px">'+chips(p.cuentas,true)+'</div>'+
          '<div style="margin-top:8px"><button class="btn sec peq" onclick="abrirIncPromo()">Ver todas las de esta promoción</button></div></div>';
-    h += '<h3 style="margin:16px 4px 8px">Pisos ('+p.pisos.length+')</h3>';
-    h += p.pisos.length ? p.pisos.map(function(x,k){
-      return '<div class="card item" onclick="abrirPiso('+k+')"><div class="grow"><div class="tit">'+esc(x.nombre)+'</div>'+
-             '<div style="margin-top:4px">'+chips(x.cuentas)+'</div></div><div>&#8250;</div></div>';
-    }).join('') : '<div class="vacio">No hay planos (PDF) en esta carpeta.</div>';
+    h += '<h3 style="margin:16px 4px 8px">Pisos ('+p.pisos.length+')</h3><div id="filtroPisos"></div><div id="listaPisos"></div>';
     $('app').innerHTML = h;
+    pintarPisos();
   }).catch(fallo);
+}
+
+// Color del piso: rojo si tiene alguna activa, naranja si alguna gestionada, verde si todas terminadas
+function colorPiso(c){
+  c = c || {};
+  if(c.ACTIVA) return 'ACTIVA';
+  if(c.GESTIONADA) return 'GESTIONADA';
+  if(c.TERMINADA) return 'TERMINADA';
+  return '';
+}
+function pasaFiltroPiso(c, f){
+  c = c || {};
+  if(!f) return true;
+  if(f === 'CON') return (c.ACTIVA||0)+(c.GESTIONADA||0)+(c.TERMINADA||0) > 0;
+  if(f === 'SIN') return !((c.ACTIVA||0)+(c.GESTIONADA||0)+(c.TERMINADA||0));
+  return colorPiso(c) === f;
+}
+function botonesFiltroPisos(lista, fnCuentas, alPulsar){
+  var opc = [['','Todos'],['CON','Con incidencias'],['ACTIVA','&#128308; Rojo'],['GESTIONADA','&#128992; Naranja'],['TERMINADA','&#128994; Verde'],['SIN','Sin incidencias']];
+  return '<div class="filtros">'+opc.map(function(o){
+    var n = lista.filter(function(x){ return pasaFiltroPiso(fnCuentas(x), o[0]); }).length;
+    return '<button class="'+(S.filtroPisos===o[0]?'on':'')+'" onclick="'+alPulsar+'(\''+o[0]+'\')">'+o[1]+' ('+n+')</button>';
+  }).join('')+'</div>';
+}
+function filtrarPisos(f){ S.filtroPisos = f; pintarPisos(); }
+function pintarPisos(){
+  var p = S.promo;
+  $('filtroPisos').innerHTML = botonesFiltroPisos(p.pisos, function(x){ return x.cuentas; }, 'filtrarPisos');
+  var h = '';
+  p.pisos.forEach(function(x,k){
+    if(!pasaFiltroPiso(x.cuentas, S.filtroPisos)) return;
+    h += '<div class="card item" onclick="abrirPiso('+k+')"><span class="punto p-'+colorPiso(x.cuentas)+'"></span>'+
+         '<div class="grow"><div class="tit">'+esc(x.nombre)+'</div><div style="margin-top:4px">'+chips(x.cuentas)+'</div></div><div>&#8250;</div></div>';
+  });
+  $('listaPisos').innerHTML = h || '<div class="vacio">'+(p.pisos.length?'Ningún piso en este filtro.':'No hay planos (PDF) en esta carpeta.')+'</div>';
 }
 
 function miUbicacion(){
@@ -266,7 +319,7 @@ function miUbicacion(){
 }
 
 function guardarPromo(){
-  var d = { codigo:$('pCod').value, jefe:$('pJefe').value, gps:$('pGps').value, direccion:$('pDir').value, notas:$('pNotas').value };
+  var d = { codigo:$('pCod').value, jefe:$('pJefe').value, telefono:$('pTel').value, gps:$('pGps').value, direccion:$('pDir').value, notas:$('pNotas').value };
   cargando(true,'Guardando...');
   run('guardarPromocion', S.ses, S.promo.nombre, d).then(function(){ cargando(false); toast('Detalles guardados'); recargar(); }).catch(fallo);
 }
@@ -280,8 +333,9 @@ function abrirPiso(k){
 
 function vistaPiso(){
   var p = S.piso;
+  S.modoInc = 'lista';
   var h = '<div class="sub" style="margin:0 4px 8px">'+esc(S.promo.nombre)+'</div>'+
-          '<div class="fila" style="margin-bottom:12px"><button class="btn sec" onclick="verPdf(\''+p.id+'\')">Ver plano (PDF)</button>'+
+          '<div class="fila" style="margin-bottom:12px">'+(p.id?'<button class="btn sec" onclick="verPdf(\''+p.id+'\')">Ver plano (PDF)</button>':'')+
           '<button class="btn" onclick="nuevaIncidencia()">+ Nueva incidencia</button></div>'+
           '<div id="listaInc"></div>';
   $('app').innerHTML = h;
@@ -289,7 +343,7 @@ function vistaPiso(){
 }
 
 function abrirIncPromo(){
-  S.filtro = '';
+  S.filtro = ''; S.modoInc = 'pisos';
   ir('incpromo', 'Incidencias · '+S.promo.nombre, function(){
     $('app').innerHTML = '<div id="listaInc"></div>';
     cargarIncidencias(function(){ return run('getIncidencias', S.ses, S.promo.nombre, ''); }, true);
@@ -297,7 +351,7 @@ function abrirIncPromo(){
 }
 
 function abrirTodas(){
-  S.filtro = 'ACTIVA';
+  S.filtro = ''; S.modoInc = 'pisos';
   ir('todas', 'Todas las incidencias', function(){
     $('app').innerHTML = '<div id="listaInc"></div>';
     cargarIncidencias(function(){ return run('getTodasIncidencias', S.ses, ''); }, true, true);
@@ -321,6 +375,11 @@ function pintarIncidencias(){
   ESTADOS.forEach(function(e){ f += '<button class="'+(S.filtro===e?'on':'')+'" onclick="filtrar(\''+e+'\')">'+NOM_EST[e]+' ('+c[e]+')</button>'; });
   f += '</div>';
   var v = l.filter(function(i){ return !S.filtro || i.estado===S.filtro; });
+  if(S.incConPiso){
+    f += '<div class="filtros"><button class="'+(S.modoInc==='pisos'?'on':'')+'" onclick="modoInc(\'pisos\')">&#127970; Por pisos</button>'+
+         '<button class="'+(S.modoInc==='lista'?'on':'')+'" onclick="modoInc(\'lista\')">&#9776; Lista</button></div>';
+    if(S.modoInc === 'pisos'){ $('listaInc').innerHTML = f + pisosConIncidencias(v); return; }
+  }
   $('listaInc').innerHTML = f + (v.length ? v.map(function(i){
     return '<div class="card item b-'+i.estado+'" onclick="abrirIncidencia(\''+i.id+'\')"><div class="grow">'+
       '<div class="tit">'+esc(i.descripcion || '(sin texto)')+'</div>'+
@@ -330,6 +389,42 @@ function pintarIncidencias(){
   }).join('') : '<div class="vacio">No hay incidencias'+(S.filtro?' en este estado':'')+'.</div>');
 }
 function filtrar(e){ S.filtro = e; pintarIncidencias(); }
+function modoInc(m){ S.modoInc = m; pintarIncidencias(); }
+
+// Agrupa las incidencias por promoción y piso (los pisos que tienen incidencias)
+function pisosConIncidencias(lista){
+  var promos = {}, orden = [];
+  lista.forEach(function(i){
+    if(!promos[i.promocion]){ promos[i.promocion] = {}; orden.push(i.promocion); }
+    var g = promos[i.promocion];
+    if(!g[i.piso]) g[i.piso] = { piso:i.piso, pisoId:i.pisoId, cuentas:{ACTIVA:0,GESTIONADA:0,TERMINADA:0} };
+    g[i.piso].cuentas[i.estado]++;
+  });
+  if(!orden.length) return '<div class="vacio">No hay pisos con incidencias'+(S.filtro?' en este estado':'')+'.</div>';
+  orden.sort(function(a,b){ return a.localeCompare(b,'es',{numeric:true}); });
+  S.gruposPisos = [];
+  var h = '';
+  orden.forEach(function(pr){
+    var pisos = Object.keys(promos[pr]).map(function(k){ return promos[pr][k]; })
+                      .sort(function(a,b){ return a.piso.localeCompare(b.piso,'es',{numeric:true}); });
+    if(S.incConPromo) h += '<div class="grupo">'+esc(pr)+' ('+pisos.length+' pisos)</div>';
+    pisos.forEach(function(x){
+      var k = S.gruposPisos.length;
+      S.gruposPisos.push({promocion:pr, piso:x.piso, pisoId:x.pisoId});
+      h += '<div class="card item" onclick="abrirPisoDirecto('+k+')"><span class="punto p-'+colorPiso(x.cuentas)+'"></span>'+
+           '<div class="grow"><div class="tit">'+esc(x.piso)+'</div><div style="margin-top:4px">'+chips(x.cuentas)+'</div></div><div>&#8250;</div></div>';
+    });
+  });
+  return h;
+}
+
+function abrirPisoDirecto(k){
+  var g = S.gruposPisos[k];
+  if(!S.promo || S.promo.nombre !== g.promocion) S.promo = { nombre:g.promocion, pisos:[] };
+  S.piso = { nombre:g.piso, id:g.pisoId };
+  S.filtro = '';
+  ir('piso', g.piso, vistaPiso);
+}
 
 function verPdf(id){
   var w = window.open('', '_blank');
@@ -351,7 +446,8 @@ function nuevaIncidencia(){
     $('app').innerHTML = '<div class="card"><div class="sub">'+esc(S.promo.nombre)+' · '+esc(S.piso.nombre)+'</div>'+
       '<label>Descripción de la incidencia</label><textarea id="nDesc" placeholder="¿Qué pasa? ¿Dónde?"></textarea>'+
       '<label>Fotos (puedes dibujar encima)</label><div class="fotos" id="nFotos"></div>'+
-      '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosNuevas.push(d);pintarFotosNuevas(\'nFotos\',S.fotosNuevas);})">&#128247; Añadir foto</button></div>'+
+      '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosNuevas.push(d);pintarFotosNuevas(\'nFotos\',S.fotosNuevas);})">&#128247; Añadir foto</button>'+
+      (S.piso.id?'<button class="btn sec" onclick="marcarPlano(S.piso.id,function(d){S.fotosNuevas.push(d);pintarFotosNuevas(\'nFotos\',S.fotosNuevas);})">&#128208; Marcar en el plano</button>':'')+'</div>'+
       '<div style="margin-top:16px"><button class="btn" style="width:100%" onclick="enviarIncidencia()">Guardar incidencia</button></div></div>';
     pintarFotosNuevas('nFotos', S.fotosNuevas);
   });
@@ -424,6 +520,7 @@ function pintarIncidencia(i){
   }).join('');
   h += '<label>Añadir comentario</label><textarea id="cTxt"></textarea><div class="fotos" id="cFotos"></div>'+
        '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128247; Foto</button>'+
+       (i.pisoId?'<button class="btn sec" onclick="marcarPlano(S.inc.pisoId,function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128208; Plano</button>':'')+
        '<button class="btn" onclick="enviarComentario()">Enviar</button></div></div>';
   $('app').innerHTML = h;
   pintarFotosNuevas('cFotos', S.fotosCom);
@@ -485,16 +582,17 @@ function elegirFoto(alTerminar){
   inp.click();
 }
 
-function editorFoto(src, alTerminar){
+function editorFoto(src, alTerminar, maxLado){
   var img = new Image();
   img.onload = function(){
-    var esc2 = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
+    var esc2 = Math.min(1, (maxLado || MAX_LADO) / Math.max(img.width, img.height));
     var W = Math.round(img.width*esc2), Hh = Math.round(img.height*esc2);
     var m = document.createElement('div');
     m.className = 'modal';
     var colores = ['#ff0000','#ffd400','#00a2ff','#00c853','#000000','#ffffff'];
     m.innerHTML = '<div class="barra">'+
       colores.map(function(c,k){ return '<button class="color'+(k===0?' on':'')+'" data-c="'+c+'" style="background:'+c+'"></button>'; }).join('')+
+      '<button data-h="lapiz" class="on">&#9999;&#65039; Lápiz</button><button data-h="texto">T Texto</button>'+
       '<button data-g="4">Fino</button><button data-g="9" class="on">Medio</button><button data-g="18">Grueso</button>'+
       '<button id="eDesh">Deshacer</button><button id="eBorrar">Borrar todo</button><span class="sep"></span>'+
       '<button id="eCanc">Cancelar</button><button id="eOk" style="background:#2e75b6">Usar foto</button></div>'+
@@ -502,11 +600,25 @@ function editorFoto(src, alTerminar){
     document.body.appendChild(m);
     var cv = m.querySelector('canvas'), cx = cv.getContext('2d');
     cv.width = W; cv.height = Hh;
-    var trazos = [], actual = null, color = colores[0], grosor = 9;
+    var trazos = [], actual = null, color = colores[0], grosor = 9, herramienta = 'lapiz';
+    var k = Math.max(1, W/1000);
+    function pintarTexto(t){
+      var tam = Math.round((18 + t.g*3) * k);
+      cx.font = 'bold '+tam+'px Arial, sans-serif';
+      cx.textBaseline = 'middle';
+      cx.lineWidth = Math.max(3, tam/6);
+      cx.strokeStyle = (t.c === '#ffffff' || t.c === '#ffd400') ? '#000000' : '#ffffff';
+      t.s.split('\n').forEach(function(linea, n){
+        cx.strokeText(linea, t.x, t.y + n*tam*1.15);
+        cx.fillStyle = t.c;
+        cx.fillText(linea, t.x, t.y + n*tam*1.15);
+      });
+    }
     function redibujar(){
       cx.drawImage(img, 0, 0, W, Hh);
       cx.lineCap = 'round'; cx.lineJoin = 'round';
       trazos.forEach(function(t){
+        if(t.s !== undefined){ pintarTexto(t); return; }
         cx.strokeStyle = t.c; cx.lineWidth = t.g * Math.max(1, W/1000);
         cx.beginPath();
         t.p.forEach(function(p,k){ if(k===0) cx.moveTo(p[0],p[1]); else cx.lineTo(p[0],p[1]); });
@@ -518,7 +630,16 @@ function editorFoto(src, alTerminar){
       var r = cv.getBoundingClientRect();
       return [ (ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * Hh / r.height ];
     }
-    cv.addEventListener('pointerdown', function(ev){ ev.preventDefault(); cv.setPointerCapture(ev.pointerId); actual = {c:color, g:grosor, p:[punto(ev)]}; trazos.push(actual); redibujar(); });
+    cv.addEventListener('pointerdown', function(ev){
+      ev.preventDefault();
+      if(herramienta === 'texto'){
+        var pt = punto(ev);
+        var txt = prompt('Texto a escribir:', '');
+        if(txt){ trazos.push({c:color, g:grosor, x:pt[0], y:pt[1], s:txt}); redibujar(); }
+        return;
+      }
+      cv.setPointerCapture(ev.pointerId); actual = {c:color, g:grosor, p:[punto(ev)]}; trazos.push(actual); redibujar();
+    });
     cv.addEventListener('pointermove', function(ev){
       if(!actual) return;
       ev.preventDefault();
@@ -537,11 +658,14 @@ function editorFoto(src, alTerminar){
     Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(b){
       b.onclick = function(){ grosor = +b.getAttribute('data-g'); Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
     });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(b){
+      b.onclick = function(){ herramienta = b.getAttribute('data-h'); Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
+    });
     m.querySelector('#eDesh').onclick = function(){ trazos.pop(); redibujar(); };
     m.querySelector('#eBorrar').onclick = function(){ if(confirm('¿Borrar todo lo dibujado?')){ trazos = []; redibujar(); } };
     m.querySelector('#eCanc').onclick = function(){ document.body.removeChild(m); };
     m.querySelector('#eOk').onclick = function(){
-      var d = cv.toDataURL('image/jpeg', 0.82);
+      var d = cv.toDataURL('image/jpeg', maxLado ? 0.88 : 0.82);
       document.body.removeChild(m);
       alTerminar(d);
     };
@@ -549,6 +673,58 @@ function editorFoto(src, alTerminar){
   };
   img.onerror = function(){ alert('No se pudo abrir la imagen.'); };
   img.src = src;
+}
+
+// ======================= DIBUJAR SOBRE EL PLANO (PDF) =======================
+// pdf.js (versión "legacy", compatible con móviles algo antiguos), cargado solo cuando hace falta
+var PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/';
+var LADO_PLANO = 2400;   // resolución de la imagen del plano
+
+function cargarPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return import(PDFJS + 'pdf.min.mjs').then(function(lib){
+    lib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs';
+    window.pdfjsLib = lib;
+    return lib;
+  }, function(){ throw 'No se pudo cargar el visor de PDF. Comprueba la conexión.'; });
+}
+
+function marcarPlano(idPdf, alTerminar){
+  if(!idPdf){ alert('Este piso no tiene plano.'); return; }
+  cargando(true, 'Abriendo plano...');
+  var lib;
+  cargarPdfJs().then(function(l){
+    lib = l;
+    if(S.cachePdf && S.cachePdf.id === idPdf) return S.cachePdf.datos;
+    return run('getPdfDatos', S.ses, idPdf).then(function(r){ S.cachePdf = {id:idPdf, datos:r.datos}; return r.datos; });
+  }).then(function(b64){
+    var bin = atob(b64), arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return lib.getDocument({data:arr}).promise;
+  }).then(function(pdf){
+    var n = 1;
+    if(pdf.numPages > 1){
+      cargando(false);
+      var r = prompt('El plano tiene '+pdf.numPages+' páginas. ¿Cuál quieres marcar?', '1');
+      if(r === null) return null;
+      n = Math.min(pdf.numPages, Math.max(1, parseInt(r,10) || 1));
+      cargando(true, 'Abriendo plano...');
+    }
+    return pdf.getPage(n);
+  }).then(function(pag){
+    if(!pag) return null;
+    var v1 = pag.getViewport({scale:1});
+    var esc3 = Math.min(5, LADO_PLANO / Math.max(v1.width, v1.height));
+    var vp = pag.getViewport({scale:esc3});
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    var cx = cv.getContext('2d');
+    cx.fillStyle = '#ffffff'; cx.fillRect(0,0,cv.width,cv.height);
+    return pag.render({canvasContext:cx, viewport:vp}).promise.then(function(){ return cv.toDataURL('image/jpeg', 0.9); });
+  }).then(function(imagen){
+    cargando(false);
+    if(imagen) editorFoto(imagen, alTerminar, LADO_PLANO);
+  }).catch(function(m){ fallo(typeof m === 'string' ? m : (m && m.message) || 'No se pudo abrir el plano.'); });
 }
 
 inicio();
