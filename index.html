@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Incidencias de obra</title>
+<meta name="theme-color" content="#1f4e79">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Incidencias">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-180.png">
+<style>
+  :root{
+    --azul:#1f4e79; --azul2:#2e75b6; --fondo:#f2f4f7; --linea:#d9dee5; --texto:#1d2733; --gris:#6b7684;
+    --activa:#d93025; --activa-f:#fce8e6; --gest:#e8a200; --gest-f:#fff4d6; --term:#188038; --term-f:#e6f4ea;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--fondo);color:var(--texto);font-size:16px}
+  header{position:sticky;top:0;z-index:10;background:var(--azul);color:#fff;display:flex;align-items:center;gap:8px;padding:10px 12px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  header h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header button{background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:8px;padding:7px 10px;font-size:14px}
+  #usr{font-size:12px;opacity:.85;text-align:right;line-height:1.2}
+  main{max-width:900px;margin:0 auto;padding:12px}
+  .card{background:#fff;border:1px solid var(--linea);border-radius:12px;padding:12px;margin-bottom:10px}
+  .item{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .item:active{background:#eef3fa}
+  .grow{flex:1;min-width:0}
+  .tit{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+  .sub{color:var(--gris);font-size:13px;margin-top:2px}
+  .chips{display:flex;gap:4px;flex-wrap:wrap}
+  .chip{border-radius:20px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+  .ch-ACTIVA{background:var(--activa-f);color:var(--activa)}
+  .ch-GESTIONADA{background:var(--gest-f);color:#9a6b00}
+  .ch-TERMINADA{background:var(--term-f);color:var(--term)}
+  .b-ACTIVA{border-left:6px solid var(--activa)}
+  .b-GESTIONADA{border-left:6px solid var(--gest)}
+  .b-TERMINADA{border-left:6px solid var(--term)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:11px 14px;font-size:15px;font-weight:600;background:var(--azul2);color:#fff;cursor:pointer}
+  .btn.sec{background:#e8eef6;color:var(--azul)}
+  .btn.peq{padding:7px 10px;font-size:13px}
+  .btn:disabled{opacity:.5}
+  .btn.e-ACTIVA{background:var(--activa)} .btn.e-GESTIONADA{background:var(--gest)} .btn.e-TERMINADA{background:var(--term)}
+  .fila{display:flex;gap:8px;flex-wrap:wrap}
+  .fila .btn{flex:1}
+  input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--linea);border-radius:8px;background:#fff;font-family:inherit}
+  textarea{min-height:90px;resize:vertical}
+  label{display:block;font-size:13px;color:var(--gris);margin:10px 0 4px}
+  details summary{cursor:pointer;font-weight:600;color:var(--azul);padding:4px 0}
+  .filtros{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
+  .filtros button{border:1px solid var(--linea);background:#fff;border-radius:20px;padding:6px 12px;font-size:13px;white-space:nowrap}
+  .filtros button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-top:8px}
+  .fotos .f{position:relative;aspect-ratio:1;background:#e3e7ec;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--gris);font-size:12px}
+  .fotos img{width:100%;height:100%;object-fit:cover;cursor:pointer}
+  .fotos .x{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:0;border-radius:50%;width:24px;height:24px}
+  .com{border-top:1px solid var(--linea);padding:8px 0}
+  .com .q{font-size:12px;color:var(--gris)}
+  .estado{font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px}
+  .vacio{color:var(--gris);text-align:center;padding:24px}
+  .aviso{background:#fff4d6;border:1px solid #f1d27a;border-radius:8px;padding:10px;margin-bottom:10px;font-size:14px}
+  #carga{position:fixed;inset:0;background:rgba(255,255,255,.6);display:none;align-items:center;justify-content:center;z-index:50;font-weight:600;color:var(--azul);flex-direction:column;gap:10px}
+  .spin{width:36px;height:36px;border:4px solid #c9d6e6;border-top-color:var(--azul2);border-radius:50%;animation:g 1s linear infinite}
+  @keyframes g{to{transform:rotate(360deg)}}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;display:none;z-index:60;max-width:90%}
+  /* modales */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:40;display:flex;flex-direction:column}
+  .modal .barra{display:flex;gap:6px;padding:8px;background:#111;flex-wrap:wrap;align-items:center}
+  .modal .barra button{background:#333;color:#fff;border:0;border-radius:8px;padding:8px 10px;font-size:14px}
+  .modal .barra button.on{outline:2px solid #fff}
+  .modal .lienzo{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:8px}
+  .modal canvas{max-width:100%;max-height:100%;touch-action:none;background:#fff}
+  .modal img.grande{max-width:100%;max-height:100%}
+  .color{width:30px;height:30px;border-radius:50%;padding:0!important;border:2px solid #555!important}
+  .sep{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <button id="atras" onclick="atras()" style="display:none">&#8592;</button>
+  <h1 id="titulo">Incidencias de obra</h1>
+  <div id="usr"></div>
+</header>
+<main id="app"></main>
+<div id="carga"><div class="spin"></div><div id="cargaTxt">Cargando...</div></div>
+<div id="toast"></div>
+<input type="file" id="archivoFoto" accept="image/*" style="display:none">
+
+<script>
+// ======================= CONFIGURACIÓN =======================
+// Pega aquí la URL de tu script de Google (Implementar > Gestionar implementaciones), la que acaba en /exec
+var API_URL = 'https://script.google.com/macros/s/AKfycbyoBkNx1Iq5DIOuwCHrksKphfwh8cl7xxLPy6qK5PTY7g4m4mKX592hhXKp23umJ6w7/exec';
+
+// ======================= ESTADO Y UTILIDADES =======================
+var ESTADOS = ['ACTIVA','GESTIONADA','TERMINADA'];
+var NOM_EST = {ACTIVA:'Activa', GESTIONADA:'Gestionada', TERMINADA:'Terminada'};
+var S = { ses:null, usuario:null, pila:[], promo:null, piso:null, filtro:'', cacheFotos:{} };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function nl(s){ return esc(s).replace(/\n/g,'<br>'); }
+function esAdmin(){ return S.usuario && S.usuario.rol === 'ADMIN'; }
+
+// Llama a una función del script de Google. Se envía como texto plano para que el
+// navegador no haga la consulta previa de CORS (Apps Script no la admite).
+function run(fn){
+  var args = Array.prototype.slice.call(arguments,1);
+  if(API_URL.indexOf('PEGA_AQUI') === 0) return Promise.reject('Falta poner la URL del script en index.html (API_URL).');
+  return fetch(API_URL, { method:'POST', body: JSON.stringify({ fn:fn, args:args }), redirect:'follow' })
+    .then(function(resp){
+      if(!resp.ok) throw 'Error de conexión con Google ('+resp.status+')';
+      return resp.text();
+    })
+    .then(function(t){
+      var j;
+      try{ j = JSON.parse(t); }catch(e){ throw 'Respuesta no válida del script de Google. ¿Está publicado con acceso "Cualquier usuario"?'; }
+      if(!j.ok) throw j.error || 'Error desconocido';
+      return j.r;
+    }, function(e){
+      if(typeof e === 'string') throw e;
+      throw 'Sin conexión con Google. Comprueba internet e inténtalo de nuevo.';
+    });
+}
+function cargando(si, txt){ $('carga').style.display = si?'flex':'none'; $('cargaTxt').textContent = txt||'Cargando...'; }
+function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3000); }
+function fallo(msg){ cargando(false); alert(msg); if(/Sesión no válida|PIN incorrecto/.test(msg)){ salir(); } }
+
+function guardarSesion(){ try{ localStorage.setItem('inc_ses', JSON.stringify(S.ses)); }catch(e){} }
+function leerSesion(){ try{ return JSON.parse(localStorage.getItem('inc_ses')||'null'); }catch(e){ return null; } }
+
+function chips(c, todos){
+  c = c || {};
+  var h = '';
+  ESTADOS.forEach(function(e){ if(c[e] || todos) h += '<span class="chip ch-'+e+'">'+(c[e]||0)+' '+NOM_EST[e].toLowerCase()+'</span>'; });
+  return h ? '<div class="chips">'+h+'</div>' : '<span class="sub">Sin incidencias</span>';
+}
+
+// ======================= NAVEGACIÓN =======================
+function ir(vista, titulo, render){
+  S.pila.push({vista:vista, titulo:titulo, render:render});
+  pintar();
+}
+function atras(){ if(S.pila.length>1){ S.pila.pop(); pintar(); } }
+function pintar(){
+  var v = S.pila[S.pila.length-1];
+  $('titulo').textContent = v.titulo;
+  $('atras').style.display = S.pila.length>1 ? '' : 'none';
+  window.scrollTo(0,0);
+  v.render();
+}
+function recargar(){ pintar(); }
+
+// ======================= ENTRADA =======================
+function inicio(){
+  var s = leerSesion();
+  if(s){
+    cargando(true);
+    run('login', s).then(function(u){ S.ses=s; S.usuario=u; cargando(false); entrar(); })
+                   .catch(function(){ cargando(false); pantallaLogin(); });
+  } else pantallaLogin();
+}
+
+function pantallaLogin(){
+  $('usr').innerHTML=''; $('atras').style.display='none'; $('titulo').textContent='Incidencias de obra';
+  $('app').innerHTML = '<div class="card"><h3 style="margin-top:0">Entrar</h3>'+
+    '<label>Usuario</label><select id="lnom"><option>Cargando...</option></select>'+
+    '<label>PIN</label><input id="lpin" type="password" inputmode="numeric" autocomplete="current-password">'+
+    '<div style="margin-top:14px"><button class="btn" style="width:100%" onclick="hacerLogin()">Entrar</button></div></div>';
+  run('listarUsuarios').then(function(l){
+    $('lnom').innerHTML = l.map(function(n){ return '<option>'+esc(n)+'</option>'; }).join('');
+  }).catch(fallo);
+}
+
+function hacerLogin(){
+  var s = { nombre:$('lnom').value, pin:$('lpin').value };
+  cargando(true);
+  run('login', s).then(function(u){ S.ses=s; S.usuario=u; guardarSesion(); cargando(false); entrar(); })
+                 .catch(function(m){ cargando(false); alert(m); });
+}
+
+function salir(){ try{ localStorage.removeItem('inc_ses'); }catch(e){} S.ses=null; S.usuario=null; S.pila=[]; pantallaLogin(); }
+
+function entrar(){
+  $('usr').innerHTML = esc(S.usuario.nombre)+'<br>'+esc(S.usuario.rol)+' · <a href="#" style="color:#fff" onclick="salir();return false">salir</a>';
+  S.pila = [];
+  ir('promos','Promociones', vistaPromociones);
+}
+
+// ======================= PROMOCIONES =======================
+function vistaPromociones(){
+  cargando(true);
+  run('getPromociones', S.ses).then(function(r){
+    cargando(false);
+    S.listaPromos = r.promociones;
+    var h = '';
+    if(r.aviso) h += '<div class="aviso">'+esc(r.aviso)+'</div>';
+    h += '<input id="buscar" placeholder="Buscar promoción..." oninput="filtrarPromos()" style="margin-bottom:10px">';
+    if(esAdmin()) h += '<div class="fila" style="margin-bottom:10px"><button class="btn sec" onclick="abrirTodas()">Todas las incidencias</button></div>';
+    h += '<div id="listaPromos"></div>';
+    $('app').innerHTML = h;
+    filtrarPromos();
+  }).catch(fallo);
+}
+
+function filtrarPromos(){
+  var q = ($('buscar').value||'').toLowerCase();
+  var l = S.listaPromos.filter(function(p){ return !q || (p.nombre+' '+(p.info.codigo||'')).toLowerCase().indexOf(q)>=0; });
+  $('listaPromos').innerHTML = l.length ? l.map(function(p,i){
+    return '<div class="card item" onclick="abrirPromo(\''+p.id+'\')">'+
+      '<div class="grow"><div class="tit">'+esc(p.nombre)+'</div>'+
+      '<div class="sub">'+(p.info.codigo?'Obra '+esc(p.info.codigo)+' · ':'')+(p.info.jefe?esc(p.info.jefe):'')+'</div>'+
+      '<div style="margin-top:6px">'+chips(p.cuentas)+'</div></div><div>&#8250;</div></div>';
+  }).join('') : '<div class="vacio">No hay promociones.</div>';
+}
+
+function abrirPromo(id){
+  var p = S.listaPromos.filter(function(x){ return x.id===id; })[0];
+  ir('promo', p ? p.nombre : 'Promoción', function(){ vistaPromo(id); });
+}
+
+function vistaPromo(id){
+  cargando(true);
+  run('getPromocion', S.ses, id).then(function(p){
+    cargando(false);
+    S.promo = p;
+    var i = p.info || {};
+    var gps = (i.gps||'').replace(/\s/g,'');
+    var mapa = gps ? '<a class="btn sec peq" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(gps)+'">Abrir en Maps</a>' : '';
+    var h = '<div class="card"><details '+(esAdmin() && !i.codigo ? 'open':'')+'><summary>Detalles de la promoción</summary>';
+    if(esAdmin()){
+      h += '<label>Código de obra</label><input id="pCod" value="'+esc(i.codigo)+'">'+
+           '<label>Jefe de obra</label><input id="pJefe" value="'+esc(i.jefe)+'">'+
+           '<label>Ubicación GPS (lat, lng)</label><div class="fila"><input id="pGps" style="flex:2" value="'+esc(i.gps)+'" placeholder="42.8125, -1.6458">'+
+           '<button class="btn sec peq" onclick="miUbicacion()">Mi ubicación</button></div>'+
+           '<label>Dirección</label><input id="pDir" value="'+esc(i.direccion)+'">'+
+           '<label>Notas</label><textarea id="pNotas">'+esc(i.notas)+'</textarea>'+
+           '<div class="fila" style="margin-top:10px"><button class="btn" onclick="guardarPromo()">Guardar detalles</button>'+mapa+'</div>';
+      if(i.actualizado) h += '<div class="sub" style="margin-top:6px">Actualizado '+esc(i.actualizado)+' por '+esc(i.por)+'</div>';
+    } else {
+      h += '<div class="sub" style="margin-top:6px">Código de obra</div><div>'+(esc(i.codigo)||'—')+'</div>'+
+           '<div class="sub" style="margin-top:6px">Jefe de obra</div><div>'+(esc(i.jefe)||'—')+'</div>'+
+           '<div class="sub" style="margin-top:6px">Dirección</div><div>'+(esc(i.direccion)||'—')+'</div>'+
+           '<div class="sub" style="margin-top:6px">Ubicación</div><div>'+(gps?mapa:'—')+'</div>'+
+           (i.notas?'<div class="sub" style="margin-top:6px">Notas</div><div>'+nl(i.notas)+'</div>':'');
+    }
+    h += '</details></div>';
+    h += '<div class="card"><div class="tit">Incidencias de la promoción</div><div style="margin-top:6px">'+chips(p.cuentas,true)+'</div>'+
+         '<div style="margin-top:8px"><button class="btn sec peq" onclick="abrirIncPromo()">Ver todas las de esta promoción</button></div></div>';
+    h += '<h3 style="margin:16px 4px 8px">Pisos ('+p.pisos.length+')</h3>';
+    h += p.pisos.length ? p.pisos.map(function(x,k){
+      return '<div class="card item" onclick="abrirPiso('+k+')"><div class="grow"><div class="tit">'+esc(x.nombre)+'</div>'+
+             '<div style="margin-top:4px">'+chips(x.cuentas)+'</div></div><div>&#8250;</div></div>';
+    }).join('') : '<div class="vacio">No hay planos (PDF) en esta carpeta.</div>';
+    $('app').innerHTML = h;
+  }).catch(fallo);
+}
+
+function miUbicacion(){
+  if(!navigator.geolocation){ alert('Este dispositivo no da la ubicación.'); return; }
+  cargando(true,'Obteniendo ubicación...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    cargando(false);
+    $('pGps').value = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6);
+  }, function(e){ cargando(false); alert('No se pudo obtener la ubicación: '+e.message); }, {enableHighAccuracy:true, timeout:15000});
+}
+
+function guardarPromo(){
+  var d = { codigo:$('pCod').value, jefe:$('pJefe').value, gps:$('pGps').value, direccion:$('pDir').value, notas:$('pNotas').value };
+  cargando(true,'Guardando...');
+  run('guardarPromocion', S.ses, S.promo.nombre, d).then(function(){ cargando(false); toast('Detalles guardados'); recargar(); }).catch(fallo);
+}
+
+// ======================= PISO =======================
+function abrirPiso(k){
+  S.piso = S.promo.pisos[k];
+  S.filtro = '';
+  ir('piso', S.piso.nombre, vistaPiso);
+}
+
+function vistaPiso(){
+  var p = S.piso;
+  var h = '<div class="sub" style="margin:0 4px 8px">'+esc(S.promo.nombre)+'</div>'+
+          '<div class="fila" style="margin-bottom:12px"><button class="btn sec" onclick="verPdf(\''+p.id+'\')">Ver plano (PDF)</button>'+
+          '<button class="btn" onclick="nuevaIncidencia()">+ Nueva incidencia</button></div>'+
+          '<div id="listaInc"></div>';
+  $('app').innerHTML = h;
+  cargarIncidencias(function(){ return run('getIncidencias', S.ses, S.promo.nombre, p.nombre); }, false);
+}
+
+function abrirIncPromo(){
+  S.filtro = '';
+  ir('incpromo', 'Incidencias · '+S.promo.nombre, function(){
+    $('app').innerHTML = '<div id="listaInc"></div>';
+    cargarIncidencias(function(){ return run('getIncidencias', S.ses, S.promo.nombre, ''); }, true);
+  });
+}
+
+function abrirTodas(){
+  S.filtro = 'ACTIVA';
+  ir('todas', 'Todas las incidencias', function(){
+    $('app').innerHTML = '<div id="listaInc"></div>';
+    cargarIncidencias(function(){ return run('getTodasIncidencias', S.ses, ''); }, true, true);
+  });
+}
+
+function cargarIncidencias(pedir, conPiso, conPromo){
+  cargando(true);
+  pedir().then(function(l){
+    cargando(false);
+    S.listaInc = l; S.incConPiso = conPiso; S.incConPromo = conPromo;
+    pintarIncidencias();
+  }).catch(fallo);
+}
+
+function pintarIncidencias(){
+  var l = S.listaInc || [];
+  var c = {ACTIVA:0,GESTIONADA:0,TERMINADA:0};
+  l.forEach(function(i){ c[i.estado]++; });
+  var f = '<div class="filtros"><button class="'+(!S.filtro?'on':'')+'" onclick="filtrar(\'\')">Todas ('+l.length+')</button>';
+  ESTADOS.forEach(function(e){ f += '<button class="'+(S.filtro===e?'on':'')+'" onclick="filtrar(\''+e+'\')">'+NOM_EST[e]+' ('+c[e]+')</button>'; });
+  f += '</div>';
+  var v = l.filter(function(i){ return !S.filtro || i.estado===S.filtro; });
+  $('listaInc').innerHTML = f + (v.length ? v.map(function(i){
+    return '<div class="card item b-'+i.estado+'" onclick="abrirIncidencia(\''+i.id+'\')"><div class="grow">'+
+      '<div class="tit">'+esc(i.descripcion || '(sin texto)')+'</div>'+
+      '<div class="sub">'+(S.incConPromo?esc(i.promocion)+' · ':'')+(S.incConPiso?esc(i.piso)+' · ':'')+esc(i.usuario)+' · '+esc(i.fecha)+'</div>'+
+      '<div class="sub">'+(i.fotos.length?'&#128247; '+i.fotos.length+'  ':'')+(i.comentarios?'&#128172; '+i.comentarios:'')+'</div></div>'+
+      '<span class="chip ch-'+i.estado+'">'+NOM_EST[i.estado]+'</span></div>';
+  }).join('') : '<div class="vacio">No hay incidencias'+(S.filtro?' en este estado':'')+'.</div>');
+}
+function filtrar(e){ S.filtro = e; pintarIncidencias(); }
+
+function verPdf(id){
+  var w = window.open('', '_blank');
+  cargando(true,'Abriendo plano...');
+  run('abrirPdf', S.ses, id).then(function(r){
+    cargando(false);
+    if(r.url){ if(w) w.location = r.url; else window.open(r.url,'_blank'); return; }
+    var bin = atob(r.datos), arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+    if(w) w.location = url; else window.open(url,'_blank');
+  }).catch(function(m){ if(w) w.close(); fallo(m); });
+}
+
+// ======================= NUEVA INCIDENCIA =======================
+function nuevaIncidencia(){
+  S.fotosNuevas = [];
+  ir('nueva', 'Nueva incidencia', function(){
+    $('app').innerHTML = '<div class="card"><div class="sub">'+esc(S.promo.nombre)+' · '+esc(S.piso.nombre)+'</div>'+
+      '<label>Descripción de la incidencia</label><textarea id="nDesc" placeholder="¿Qué pasa? ¿Dónde?"></textarea>'+
+      '<label>Fotos (puedes dibujar encima)</label><div class="fotos" id="nFotos"></div>'+
+      '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosNuevas.push(d);pintarFotosNuevas(\'nFotos\',S.fotosNuevas);})">&#128247; Añadir foto</button></div>'+
+      '<div style="margin-top:16px"><button class="btn" style="width:100%" onclick="enviarIncidencia()">Guardar incidencia</button></div></div>';
+    pintarFotosNuevas('nFotos', S.fotosNuevas);
+  });
+}
+
+function pintarFotosNuevas(idCont, lista){
+  $(idCont).innerHTML = lista.map(function(d,k){
+    return '<div class="f"><img src="'+d+'" onclick="reeditar(\''+idCont+'\','+k+')"><button class="x" onclick="quitarFoto(\''+idCont+'\','+k+')">&times;</button></div>';
+  }).join('');
+}
+function listaDe(idCont){ return idCont==='nFotos' ? S.fotosNuevas : S.fotosCom; }
+function quitarFoto(idCont,k){ var l=listaDe(idCont); l.splice(k,1); pintarFotosNuevas(idCont,l); }
+function reeditar(idCont,k){
+  var l=listaDe(idCont);
+  editorFoto(l[k], function(d){ l[k]=d; pintarFotosNuevas(idCont,l); });
+}
+
+function subirFotos(lista){
+  var ids = [], i = 0;
+  function sig(){
+    if(i>=lista.length) return Promise.resolve(ids);
+    cargando(true,'Subiendo foto '+(i+1)+' de '+lista.length+'...');
+    return run('subirFoto', S.ses, S.promo ? S.promo.nombre : 'General', lista[i]).then(function(id){ ids.push(id); i++; return sig(); });
+  }
+  return sig();
+}
+
+function enviarIncidencia(){
+  var desc = $('nDesc').value.trim();
+  if(!desc && !S.fotosNuevas.length){ alert('Escribe una descripción o añade una foto.'); return; }
+  subirFotos(S.fotosNuevas).then(function(ids){
+    cargando(true,'Guardando incidencia...');
+    return run('crearIncidencia', S.ses, {promocion:S.promo.nombre, piso:S.piso.nombre, pisoId:S.piso.id, descripcion:desc, fotos:ids});
+  }).then(function(id){
+    cargando(false); toast('Incidencia '+id+' guardada');
+    S.pila.pop(); pintar();
+  }).catch(fallo);
+}
+
+// ======================= DETALLE DE INCIDENCIA =======================
+function abrirIncidencia(id){
+  S.fotosCom = [];
+  ir('inc', 'Incidencia '+id, function(){ vistaIncidencia(id); });
+}
+
+function vistaIncidencia(id){
+  cargando(true);
+  run('getIncidencia', S.ses, id).then(function(i){ cargando(false); pintarIncidencia(i); }).catch(fallo);
+}
+
+function pintarIncidencia(i){
+  S.inc = i;
+  var h = '<div class="card b-'+i.estado+'">'+
+    '<div style="display:flex;align-items:center;gap:8px"><span class="estado ch-'+i.estado+'">'+NOM_EST[i.estado]+'</span>'+
+    '<span class="sub">'+esc(i.id)+'</span></div>'+
+    '<div class="sub" style="margin-top:8px">'+esc(i.promocion)+' · '+esc(i.piso)+'</div>'+
+    '<div class="sub">'+esc(i.usuario)+' ('+esc(i.rol)+') · '+esc(i.fecha)+'</div>'+
+    '<div style="margin-top:10px;white-space:normal">'+nl(i.descripcion)+'</div>'+
+    fotosRemotas(i.fotos)+
+    (i.pisoId?'<div style="margin-top:10px"><button class="btn sec peq" onclick="verPdf(\''+i.pisoId+'\')">Ver plano del piso</button></div>':'')+
+    '</div>';
+  if(esAdmin()){
+    h += '<div class="card"><div class="tit">Cambiar estado</div><div class="fila" style="margin-top:8px">';
+    ESTADOS.forEach(function(e){ h += '<button class="btn e-'+e+'" '+(i.estado===e?'disabled':'')+' onclick="cambiarEstado(\''+e+'\')">'+NOM_EST[e]+'</button>'; });
+    h += '</div>'+(i.cambio?'<div class="sub" style="margin-top:6px">Último cambio '+esc(i.cambio)+' por '+esc(i.cambiadoPor)+'</div>':'')+'</div>';
+  }
+  h += '<div class="card"><div class="tit">Comentarios ('+i.listaComentarios.length+')</div>';
+  h += i.listaComentarios.map(function(c){
+    return '<div class="com"><div class="q">'+esc(c.usuario)+' · '+esc(c.fecha)+'</div><div>'+nl(c.texto)+'</div>'+fotosRemotas(c.fotos)+'</div>';
+  }).join('');
+  h += '<label>Añadir comentario</label><textarea id="cTxt"></textarea><div class="fotos" id="cFotos"></div>'+
+       '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128247; Foto</button>'+
+       '<button class="btn" onclick="enviarComentario()">Enviar</button></div></div>';
+  $('app').innerHTML = h;
+  pintarFotosNuevas('cFotos', S.fotosCom);
+  cargarFotosRemotas();
+}
+
+function fotosRemotas(ids){
+  if(!ids || !ids.length) return '';
+  return '<div class="fotos">'+ids.map(function(id){ return '<div class="f" data-foto="'+esc(id)+'">cargando...</div>'; }).join('')+'</div>';
+}
+
+function cargarFotosRemotas(){
+  var celdas = document.querySelectorAll('[data-foto]');
+  Array.prototype.forEach.call(celdas, function(cel){
+    var id = cel.getAttribute('data-foto');
+    var poner = function(d){ cel.innerHTML = '<img src="'+d+'">'; cel.firstChild.onclick = function(){ verGrande(d); }; };
+    if(S.cacheFotos[id]){ poner(S.cacheFotos[id]); return; }
+    run('getFoto', S.ses, id).then(function(d){ S.cacheFotos[id]=d; poner(d); }).catch(function(){ cel.textContent='(sin foto)'; });
+  });
+}
+
+function enviarComentario(){
+  var t = $('cTxt').value.trim();
+  if(!t && !S.fotosCom.length){ alert('Escribe un comentario o añade una foto.'); return; }
+  subirFotos(S.fotosCom).then(function(ids){
+    cargando(true,'Enviando...');
+    return run('comentar', S.ses, S.inc.id, t, ids);
+  }).then(function(i){ cargando(false); S.fotosCom=[]; toast('Comentario añadido'); pintarIncidencia(i); }).catch(fallo);
+}
+
+function cambiarEstado(e){
+  var t = prompt('Cambiar a "'+NOM_EST[e]+'". Comentario (opcional):', '');
+  if(t === null) return;
+  cargando(true,'Guardando...');
+  run('cambiarEstado', S.ses, S.inc.id, e, t).then(function(i){ cargando(false); toast('Estado: '+NOM_EST[e]); pintarIncidencia(i); }).catch(fallo);
+}
+
+function verGrande(src){
+  var m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = '<div class="barra"><span class="sep"></span><button>Cerrar</button></div><div class="lienzo"><img class="grande" src="'+src+'"></div>';
+  m.querySelector('button').onclick = function(){ document.body.removeChild(m); };
+  document.body.appendChild(m);
+}
+
+// ======================= FOTOS: ELEGIR Y DIBUJAR =======================
+var MAX_LADO = 1600;
+
+function elegirFoto(alTerminar){
+  var inp = $('archivoFoto');
+  inp.value = '';
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0];
+    if(!f) return;
+    var lector = new FileReader();
+    lector.onload = function(){ editorFoto(lector.result, alTerminar); };
+    lector.readAsDataURL(f);
+  };
+  inp.click();
+}
+
+function editorFoto(src, alTerminar){
+  var img = new Image();
+  img.onload = function(){
+    var esc2 = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
+    var W = Math.round(img.width*esc2), Hh = Math.round(img.height*esc2);
+    var m = document.createElement('div');
+    m.className = 'modal';
+    var colores = ['#ff0000','#ffd400','#00a2ff','#00c853','#000000','#ffffff'];
+    m.innerHTML = '<div class="barra">'+
+      colores.map(function(c,k){ return '<button class="color'+(k===0?' on':'')+'" data-c="'+c+'" style="background:'+c+'"></button>'; }).join('')+
+      '<button data-g="4">Fino</button><button data-g="9" class="on">Medio</button><button data-g="18">Grueso</button>'+
+      '<button id="eDesh">Deshacer</button><button id="eBorrar">Borrar todo</button><span class="sep"></span>'+
+      '<button id="eCanc">Cancelar</button><button id="eOk" style="background:#2e75b6">Usar foto</button></div>'+
+      '<div class="lienzo"><canvas></canvas></div>';
+    document.body.appendChild(m);
+    var cv = m.querySelector('canvas'), cx = cv.getContext('2d');
+    cv.width = W; cv.height = Hh;
+    var trazos = [], actual = null, color = colores[0], grosor = 9;
+    function redibujar(){
+      cx.drawImage(img, 0, 0, W, Hh);
+      cx.lineCap = 'round'; cx.lineJoin = 'round';
+      trazos.forEach(function(t){
+        cx.strokeStyle = t.c; cx.lineWidth = t.g * Math.max(1, W/1000);
+        cx.beginPath();
+        t.p.forEach(function(p,k){ if(k===0) cx.moveTo(p[0],p[1]); else cx.lineTo(p[0],p[1]); });
+        if(t.p.length===1) cx.lineTo(t.p[0][0]+0.1, t.p[0][1]+0.1);
+        cx.stroke();
+      });
+    }
+    function punto(ev){
+      var r = cv.getBoundingClientRect();
+      return [ (ev.clientX - r.left) * W / r.width, (ev.clientY - r.top) * Hh / r.height ];
+    }
+    cv.addEventListener('pointerdown', function(ev){ ev.preventDefault(); cv.setPointerCapture(ev.pointerId); actual = {c:color, g:grosor, p:[punto(ev)]}; trazos.push(actual); redibujar(); });
+    cv.addEventListener('pointermove', function(ev){
+      if(!actual) return;
+      ev.preventDefault();
+      var a = actual.p[actual.p.length-1], b = punto(ev);
+      actual.p.push(b);
+      // dibuja solo el tramo nuevo (más fluido en el móvil)
+      cx.strokeStyle = actual.c; cx.lineWidth = actual.g * Math.max(1, W/1000);
+      cx.lineCap = 'round'; cx.lineJoin = 'round';
+      cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke();
+    });
+    var fin = function(){ actual = null; };
+    cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
+    Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(b){
+      b.onclick = function(){ color = b.getAttribute('data-c'); Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
+    });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(b){
+      b.onclick = function(){ grosor = +b.getAttribute('data-g'); Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
+    });
+    m.querySelector('#eDesh').onclick = function(){ trazos.pop(); redibujar(); };
+    m.querySelector('#eBorrar').onclick = function(){ if(confirm('¿Borrar todo lo dibujado?')){ trazos = []; redibujar(); } };
+    m.querySelector('#eCanc').onclick = function(){ document.body.removeChild(m); };
+    m.querySelector('#eOk').onclick = function(){
+      var d = cv.toDataURL('image/jpeg', 0.82);
+      document.body.removeChild(m);
+      alTerminar(d);
+    };
+    redibujar();
+  };
+  img.onerror = function(){ alert('No se pudo abrir la imagen.'); };
+  img.src = src;
+}
+
+inicio();
+</script>
+</body>
+</html>
