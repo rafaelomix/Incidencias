@@ -85,6 +85,7 @@
 <header>
   <button id="atras" onclick="atras()" style="display:none">&#8592;</button>
   <h1 id="titulo">Incidencias de obra</h1>
+  <button id="refrescar" onclick="refrescarTodo()" title="Actualizar" style="display:none">&#8635;</button>
   <div id="usr"></div>
 </header>
 <main id="app"></main>
@@ -100,7 +101,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbyoBkNx1Iq5DIOuwCHrksKphf
 // ======================= ESTADO Y UTILIDADES =======================
 var ESTADOS = ['ACTIVA','GESTIONADA','TERMINADA'];
 var NOM_EST = {ACTIVA:'Activa', GESTIONADA:'Gestionada', TERMINADA:'Terminada'};
-var S = { ses:null, usuario:null, pila:[], promo:null, piso:null, filtro:'', cacheFotos:{} };
+var S = { ses:null, usuario:null, pila:[], promo:null, piso:null, filtro:'', cacheFotos:{}, cache:{}, vista:'' };
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -140,6 +141,28 @@ function chips(c, todos){
   ESTADOS.forEach(function(e){ if(c[e] || todos) h += '<span class="chip ch-'+e+'">'+(c[e]||0)+' '+NOM_EST[e].toLowerCase()+'</span>'; });
   return h ? '<div class="chips">'+h+'</div>' : '<span class="sub">Sin incidencias</span>';
 }
+
+// ======================= DATOS CON MEMORIA =======================
+// Pinta al momento lo que ya se cargó antes y lo actualiza en segundo plano.
+function cargarCon(clave, fn, args, pintarFn){
+  S.vista = clave;
+  var c = S.cache[clave];
+  if(c) pintarFn(c); else cargando(true);
+  return run.apply(null, [fn].concat(args)).then(function(r){
+    if(S.vista !== clave){ S.cache[clave] = r; return; }
+    cargando(false);
+    var cambia = !c || JSON.stringify(c) !== JSON.stringify(r);
+    S.cache[clave] = r;
+    if(!cambia) return;
+    var foco = document.activeElement;
+    if(c && foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName)) return;   // no borrar lo que se está escribiendo
+    pintarFn(r);
+  }).catch(function(m){
+    if(c){ cargando(false); toast('No se pudo actualizar: '+m); } else fallo(m);
+  });
+}
+function olvidar(){ S.cache = {}; }
+function refrescarTodo(){ olvidar(); S.forzar = true; recargar(); }
 
 // ======================= NAVEGACIÓN =======================
 function ir(vista, titulo, render){
@@ -188,15 +211,18 @@ function salir(){ try{ localStorage.removeItem('inc_ses'); }catch(e){} S.ses=nul
 
 function entrar(){
   $('usr').innerHTML = esc(S.usuario.nombre)+'<br>'+esc(S.usuario.rol)+' · <a href="#" style="color:#fff" onclick="salir();return false">salir</a>';
+  $('refrescar').style.display = '';
   S.pila = [];
   ir('promos','Promociones', vistaPromociones);
 }
 
 // ======================= PROMOCIONES =======================
 function vistaPromociones(){
-  cargando(true);
-  run('getPromociones', S.ses).then(function(r){
-    cargando(false);
+  var f = !!S.forzar; S.forzar = false;
+  cargarCon('promos', 'getPromociones', [S.ses, f], pintarPromociones);
+}
+function pintarPromociones(r){
+    var q = $('buscar') ? $('buscar').value : '';
     S.listaPromos = r.promociones;
     var h = '';
     if(r.aviso) h += '<div class="aviso">'+esc(r.aviso)+'</div>';
@@ -204,8 +230,8 @@ function vistaPromociones(){
     if(esAdmin()) h += '<div class="fila" style="margin-bottom:10px"><button class="btn sec" onclick="abrirTodas()">Todas las incidencias</button></div>';
     h += '<div id="listaPromos"></div>';
     $('app').innerHTML = h;
+    $('buscar').value = q;
     filtrarPromos();
-  }).catch(fallo);
 }
 
 function filtrarPromos(){
@@ -238,9 +264,10 @@ function botonLlamar(tel){
 }
 
 function vistaPromo(id){
-  cargando(true);
-  run('getPromocion', S.ses, id).then(function(p){
-    cargando(false);
+  var f = !!S.forzar; S.forzar = false;
+  cargarCon('promo:'+id, 'getPromocion', [S.ses, id, f], pintarPromo);
+}
+function pintarPromo(p){
     S.promo = p;
     if(!S.filtroPisos) S.filtroPisos = '';
     var i = p.info || {};
@@ -271,7 +298,6 @@ function vistaPromo(id){
     h += '<h3 style="margin:16px 4px 8px">Pisos ('+p.pisos.length+')</h3><div id="filtroPisos"></div><div id="listaPisos"></div>';
     $('app').innerHTML = h;
     pintarPisos();
-  }).catch(fallo);
 }
 
 // Color del piso: rojo si tiene alguna activa, naranja si alguna gestionada, verde si todas terminadas
@@ -321,7 +347,7 @@ function miUbicacion(){
 function guardarPromo(){
   var d = { codigo:$('pCod').value, jefe:$('pJefe').value, telefono:$('pTel').value, gps:$('pGps').value, direccion:$('pDir').value, notas:$('pNotas').value };
   cargando(true,'Guardando...');
-  run('guardarPromocion', S.ses, S.promo.nombre, d).then(function(){ cargando(false); toast('Detalles guardados'); recargar(); }).catch(fallo);
+  run('guardarPromocion', S.ses, S.promo.nombre, d).then(function(){ cargando(false); olvidar(); toast('Detalles guardados'); recargar(); }).catch(fallo);
 }
 
 // ======================= PISO =======================
@@ -339,14 +365,14 @@ function vistaPiso(){
           '<button class="btn" onclick="nuevaIncidencia()">+ Nueva incidencia</button></div>'+
           '<div id="listaInc"></div>';
   $('app').innerHTML = h;
-  cargarIncidencias(function(){ return run('getIncidencias', S.ses, S.promo.nombre, p.nombre); }, false);
+  cargarIncidencias('inc:'+S.promo.nombre+'|'+p.nombre, 'getIncidencias', [S.ses, S.promo.nombre, p.nombre], false);
 }
 
 function abrirIncPromo(){
   S.filtro = ''; S.modoInc = 'pisos';
   ir('incpromo', 'Incidencias · '+S.promo.nombre, function(){
     $('app').innerHTML = '<div id="listaInc"></div>';
-    cargarIncidencias(function(){ return run('getIncidencias', S.ses, S.promo.nombre, ''); }, true);
+    cargarIncidencias('inc:'+S.promo.nombre, 'getIncidencias', [S.ses, S.promo.nombre, ''], true);
   });
 }
 
@@ -354,17 +380,13 @@ function abrirTodas(){
   S.filtro = ''; S.modoInc = 'pisos';
   ir('todas', 'Todas las incidencias', function(){
     $('app').innerHTML = '<div id="listaInc"></div>';
-    cargarIncidencias(function(){ return run('getTodasIncidencias', S.ses, ''); }, true, true);
+    cargarIncidencias('inc:todas', 'getTodasIncidencias', [S.ses, ''], true, true);
   });
 }
 
-function cargarIncidencias(pedir, conPiso, conPromo){
-  cargando(true);
-  pedir().then(function(l){
-    cargando(false);
-    S.listaInc = l; S.incConPiso = conPiso; S.incConPromo = conPromo;
-    pintarIncidencias();
-  }).catch(fallo);
+function cargarIncidencias(clave, fn, args, conPiso, conPromo){
+  S.incConPiso = conPiso; S.incConPromo = conPromo;
+  cargarCon(clave, fn, args, function(l){ S.listaInc = l; pintarIncidencias(); });
 }
 
 function pintarIncidencias(){
@@ -465,15 +487,39 @@ function reeditar(idCont,k){
   editorFoto(l[k], function(d){ l[k]=d; pintarFotosNuevas(idCont,l); });
 }
 
-function subirFotos(lista){
-  var ids = [], i = 0;
-  function sig(){
-    if(i>=lista.length) return Promise.resolve(ids);
-    cargando(true,'Subiendo foto '+(i+1)+' de '+lista.length+'...');
-    return run('subirFoto', S.ses, S.promo ? S.promo.nombre : 'General', lista[i]).then(function(id){ ids.push(id); i++; return sig(); });
-  }
-  return sig();
+// Miniatura pequeña para los listados (la foto grande solo se descarga al tocarla)
+function miniatura(dataUrl){
+  return new Promise(function(ok){
+    var img = new Image();
+    img.onload = function(){
+      var e = Math.min(1, 360 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width*e); c.height = Math.round(img.height*e);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      ok(c.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = function(){ ok(''); };
+    img.src = dataUrl;
+  });
 }
+
+// Sube todas las fotos a la vez (en paralelo)
+function subirFotos(lista){
+  if(!lista.length) return Promise.resolve([]);
+  var hechas = 0;
+  cargando(true, 'Subiendo fotos (0 de '+lista.length+')...');
+  var promo = S.promo ? S.promo.nombre : 'General';
+  return Promise.all(lista.map(function(d){
+    return miniatura(d).then(function(mini){
+      return run('subirFoto', S.ses, promo, d, mini).then(function(id){
+        hechas++; $('cargaTxt').textContent = 'Subiendo fotos ('+hechas+' de '+lista.length+')...';
+        if(mini && m2(id)) S.cacheFotos[m2(id)] = mini;   // la miniatura ya la tenemos: no hace falta descargarla
+        return id;
+      });
+    });
+  }));
+}
+function m2(id){ return String(id).split(':')[1] || ''; }
 
 function enviarIncidencia(){
   var desc = $('nDesc').value.trim();
@@ -482,7 +528,7 @@ function enviarIncidencia(){
     cargando(true,'Guardando incidencia...');
     return run('crearIncidencia', S.ses, {promocion:S.promo.nombre, piso:S.piso.nombre, pisoId:S.piso.id, descripcion:desc, fotos:ids});
   }).then(function(id){
-    cargando(false); toast('Incidencia '+id+' guardada');
+    cargando(false); olvidar(); toast('Incidencia '+id+' guardada');
     S.pila.pop(); pintar();
   }).catch(fallo);
 }
@@ -494,52 +540,78 @@ function abrirIncidencia(id){
 }
 
 function vistaIncidencia(id){
-  cargando(true);
-  run('getIncidencia', S.ses, id).then(function(i){ cargando(false); pintarIncidencia(i); }).catch(fallo);
+  cargarCon('ver:'+id, 'getIncidencia', [S.ses, id], pintarIncidencia);
 }
 
 function pintarIncidencia(i){
   S.inc = i;
+  var txt = $('cTxt') ? $('cTxt').value : '';
   var h = '<div class="card b-'+i.estado+'">'+
     '<div style="display:flex;align-items:center;gap:8px"><span class="estado ch-'+i.estado+'">'+NOM_EST[i.estado]+'</span>'+
     '<span class="sub">'+esc(i.id)+'</span></div>'+
-    '<div class="sub" style="margin-top:8px">'+esc(i.promocion)+' · '+esc(i.piso)+'</div>'+
-    '<div class="sub">'+esc(i.usuario)+' ('+esc(i.rol)+') · '+esc(i.fecha)+'</div>'+
-    '<div style="margin-top:10px;white-space:normal">'+nl(i.descripcion)+'</div>'+
-    fotosRemotas(i.fotos)+
-    (i.pisoId?'<div style="margin-top:10px"><button class="btn sec peq" onclick="verPdf(\''+i.pisoId+'\')">Ver plano del piso</button></div>':'')+
-    '</div>';
+    '<div class="tit" style="margin-top:8px">'+esc(i.promocion)+' · '+esc(i.piso)+'</div>'+
+    (i.pisoId?'<div style="margin-top:8px"><button class="btn sec peq" onclick="verPdf(\''+i.pisoId+'\')">Ver plano del piso</button></div>':'');
   if(esAdmin()){
-    h += '<div class="card"><div class="tit">Cambiar estado</div><div class="fila" style="margin-top:8px">';
-    ESTADOS.forEach(function(e){ h += '<button class="btn e-'+e+'" '+(i.estado===e?'disabled':'')+' onclick="cambiarEstado(\''+e+'\')">'+NOM_EST[e]+'</button>'; });
-    h += '</div>'+(i.cambio?'<div class="sub" style="margin-top:6px">Último cambio '+esc(i.cambio)+' por '+esc(i.cambiadoPor)+'</div>':'')+'</div>';
+    h += '<div class="fila" style="margin-top:10px">';
+    ESTADOS.forEach(function(e){ h += '<button class="btn peq e-'+e+'" '+(i.estado===e?'disabled':'')+' onclick="cambiarEstado(\''+e+'\')">'+NOM_EST[e]+'</button>'; });
+    h += '</div>';
   }
-  h += '<div class="card"><div class="tit">Comentarios ('+i.listaComentarios.length+')</div>';
+  if(i.cambio) h += '<div class="sub" style="margin-top:6px">Último cambio '+esc(i.cambio)+' por '+esc(i.cambiadoPor)+'</div>';
+  h += '</div>';
+
+  // Historial: la incidencia y sus comentarios, cada uno con sus fotos
+  h += '<div class="card"><div class="tit">Historial</div>';
+  h += '<div class="com"><div class="q">'+esc(i.usuario)+' ('+esc(i.rol)+') · '+esc(i.fecha)+' · abrió la incidencia</div>'+
+       '<div>'+nl(i.descripcion)+'</div>'+fotosRemotas(i.fotos)+'</div>';
   h += i.listaComentarios.map(function(c){
     return '<div class="com"><div class="q">'+esc(c.usuario)+' · '+esc(c.fecha)+'</div><div>'+nl(c.texto)+'</div>'+fotosRemotas(c.fotos)+'</div>';
   }).join('');
-  h += '<label>Añadir comentario</label><textarea id="cTxt"></textarea><div class="fotos" id="cFotos"></div>'+
+  h += '<label>Añadir comentario o fotos</label><textarea id="cTxt"></textarea><div class="fotos" id="cFotos"></div>'+
        '<div class="fila" style="margin-top:8px"><button class="btn sec" onclick="elegirFoto(function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128247; Foto</button>'+
        (i.pisoId?'<button class="btn sec" onclick="marcarPlano(S.inc.pisoId,function(d){S.fotosCom.push(d);pintarFotosNuevas(\'cFotos\',S.fotosCom);})">&#128208; Plano</button>':'')+
        '<button class="btn" onclick="enviarComentario()">Enviar</button></div></div>';
   $('app').innerHTML = h;
+  $('cTxt').value = txt;
   pintarFotosNuevas('cFotos', S.fotosCom);
   cargarFotosRemotas();
 }
 
+// Cada foto se guarda como "idGrande:idMiniatura" (las antiguas solo tienen un id)
 function fotosRemotas(ids){
   if(!ids || !ids.length) return '';
-  return '<div class="fotos">'+ids.map(function(id){ return '<div class="f" data-foto="'+esc(id)+'">cargando...</div>'; }).join('')+'</div>';
+  return '<div class="fotos">'+ids.map(function(f){
+    var p = String(f).split(':');
+    return '<div class="f" data-grande="'+esc(p[0])+'" data-mini="'+esc(p[1]||p[0])+'">&middot;&middot;&middot;</div>';
+  }).join('')+'</div>';
 }
 
 function cargarFotosRemotas(){
-  var celdas = document.querySelectorAll('[data-foto]');
-  Array.prototype.forEach.call(celdas, function(cel){
-    var id = cel.getAttribute('data-foto');
-    var poner = function(d){ cel.innerHTML = '<img src="'+d+'">'; cel.firstChild.onclick = function(){ verGrande(d); }; };
-    if(S.cacheFotos[id]){ poner(S.cacheFotos[id]); return; }
-    run('getFoto', S.ses, id).then(function(d){ S.cacheFotos[id]=d; poner(d); }).catch(function(){ cel.textContent='(sin foto)'; });
-  });
+  var celdas = Array.prototype.slice.call(document.querySelectorAll('[data-mini]'));
+  var pedir = [];
+  function poner(cel){
+    var d = S.cacheFotos[cel.getAttribute('data-mini')];
+    if(d === undefined || d === null) return false;
+    if(!d){ cel.textContent = '(sin foto)'; return true; }
+    cel.innerHTML = '<img src="'+d+'">';
+    cel.firstChild.onclick = function(){ verFotoGrande(cel.getAttribute('data-grande'), d); };
+    return true;
+  }
+  celdas.forEach(function(cel){ if(!poner(cel)) pedir.push(cel.getAttribute('data-mini')); });
+  if(!pedir.length) return;
+  run('getMinis', S.ses, pedir.filter(function(x,k){ return pedir.indexOf(x)===k; })).then(function(r){
+    Object.keys(r).forEach(function(k){ S.cacheFotos[k] = r[k]; });
+    celdas.forEach(poner);
+  }).catch(function(){ celdas.forEach(function(c){ if(!c.querySelector('img')) c.textContent='(sin foto)'; }); });
+}
+
+// Muestra la miniatura ampliada al momento y la cambia por la foto grande cuando llega
+function verFotoGrande(id, mini){
+  var m = verGrande(S.cacheFotos['g:'+id] || mini);
+  if(S.cacheFotos['g:'+id]) return;
+  run('getFoto', S.ses, id).then(function(d){
+    S.cacheFotos['g:'+id] = d;
+    var im = m.querySelector('img'); if(im) im.src = d;
+  }).catch(function(){});
 }
 
 function enviarComentario(){
@@ -548,14 +620,14 @@ function enviarComentario(){
   subirFotos(S.fotosCom).then(function(ids){
     cargando(true,'Enviando...');
     return run('comentar', S.ses, S.inc.id, t, ids);
-  }).then(function(i){ cargando(false); S.fotosCom=[]; toast('Comentario añadido'); pintarIncidencia(i); }).catch(fallo);
+  }).then(function(i){ cargando(false); olvidar(); S.fotosCom=[]; S.cache['ver:'+i.id]=i; $('cTxt').value=''; toast('Comentario añadido'); pintarIncidencia(i); }).catch(fallo);
 }
 
 function cambiarEstado(e){
   var t = prompt('Cambiar a "'+NOM_EST[e]+'". Comentario (opcional):', '');
   if(t === null) return;
   cargando(true,'Guardando...');
-  run('cambiarEstado', S.ses, S.inc.id, e, t).then(function(i){ cargando(false); toast('Estado: '+NOM_EST[e]); pintarIncidencia(i); }).catch(fallo);
+  run('cambiarEstado', S.ses, S.inc.id, e, t).then(function(i){ cargando(false); olvidar(); S.cache['ver:'+i.id]=i; toast('Estado: '+NOM_EST[e]); pintarIncidencia(i); }).catch(fallo);
 }
 
 function verGrande(src){
@@ -564,10 +636,11 @@ function verGrande(src){
   m.innerHTML = '<div class="barra"><span class="sep"></span><button>Cerrar</button></div><div class="lienzo"><img class="grande" src="'+src+'"></div>';
   m.querySelector('button').onclick = function(){ document.body.removeChild(m); };
   document.body.appendChild(m);
+  return m;
 }
 
 // ======================= FOTOS: ELEGIR Y DIBUJAR =======================
-var MAX_LADO = 1600;
+var MAX_LADO = 1400;   // tamaño de las fotos (px): suficiente y más rápido de subir
 
 function elegirFoto(alTerminar){
   var inp = $('archivoFoto');
@@ -665,7 +738,7 @@ function editorFoto(src, alTerminar, maxLado){
     m.querySelector('#eBorrar').onclick = function(){ if(confirm('¿Borrar todo lo dibujado?')){ trazos = []; redibujar(); } };
     m.querySelector('#eCanc').onclick = function(){ document.body.removeChild(m); };
     m.querySelector('#eOk').onclick = function(){
-      var d = cv.toDataURL('image/jpeg', maxLado ? 0.88 : 0.82);
+      var d = cv.toDataURL('image/jpeg', maxLado ? 0.85 : 0.78);
       document.body.removeChild(m);
       alTerminar(d);
     };
