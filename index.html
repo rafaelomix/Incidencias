@@ -745,7 +745,7 @@ function editorFoto(src, alTerminar, maxLado){
     var cv = m.querySelector('canvas'), cx = cv.getContext('2d');
     cv.width = W; cv.height = Hh;
     cv.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;max-height:none;touch-action:none';
-    var trazos = [], actual = null, color = colores[0], grosor = 9, herramienta = inicial;
+    var trazos = [], actual = null, color = colores[0], grosor = 9, herramienta = inicial, previa = inicial;
     var k = Math.max(1, W/1000);
 
     // ---------- vista: tamaño base ajustado a la pantalla + zoom (z) y desplazamiento (tx, ty)
@@ -813,7 +813,10 @@ function editorFoto(src, alTerminar, maxLado){
     }
     caja.addEventListener('pointerdown', function(ev){
       ev.preventDefault();
-      caja.setPointerCapture(ev.pointerId);
+      if(m.querySelector('.cajaTexto')) return;                     // escribiendo un texto
+      if(ev.isPrimary){ dedos = {}; gesto = null; arrastre = null; actual = null; }   // primer dedo: empieza limpio
+      if(herramienta === 'texto' && ev.isPrimary){ pedirTexto(punto(ev)); return; }
+      try{ caja.setPointerCapture(ev.pointerId); }catch(e){}
       dedos[ev.pointerId] = {x:ev.clientX, y:ev.clientY};
       if(nDedos() === 2){
         if(actual){ trazos.pop(); actual = null; redibujar(); }   // el segundo dedo cancela el trazo
@@ -823,13 +826,6 @@ function editorFoto(src, alTerminar, maxLado){
       }
       if(nDedos() > 2) return;
       if(herramienta === 'mover'){ arrastre = { x:ev.clientX, y:ev.clientY, tx:tx, ty:ty }; return; }
-      if(herramienta === 'texto'){
-        var pt = punto(ev);
-        delete dedos[ev.pointerId];
-        var txt = prompt('Texto a escribir:', '');
-        if(txt) { trazos.push({c:color, g:grosor, tam:Math.round(Math.max(10, (18 + grosor*3) * k / z)), x:pt[0], y:pt[1], s:txt}); redibujar(); }
-        return;
-      }
       actual = {c:color, w:grosorActual(), p:[punto(ev)]}; trazos.push(actual); redibujar();
     });
     caja.addEventListener('pointermove', function(ev){
@@ -858,13 +854,44 @@ function editorFoto(src, alTerminar, maxLado){
     }
     caja.addEventListener('pointerup', soltar);
     caja.addEventListener('pointercancel', soltar);
+    caja.addEventListener('lostpointercapture', soltar);
+
+    // Cuadro para escribir el texto (sin la ventana del navegador). Después vuelve a la herramienta anterior.
+    function pedirTexto(pt){
+      var d = document.createElement('div');
+      d.className = 'cajaTexto';
+      d.style.cssText = 'position:absolute;left:50%;top:30%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;padding:12px;width:min(90vw,360px);z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.5)';
+      d.innerHTML = '<div style="font-weight:600;margin-bottom:8px;color:#1d2733">Texto a escribir</div>'+
+        '<textarea style="min-height:70px"></textarea>'+
+        '<div class="fila" style="margin-top:8px"><button class="btn sec" data-x="no">Cancelar</button><button class="btn" data-x="si">Poner</button></div>';
+      m.appendChild(d);
+      var ta = d.querySelector('textarea');
+      setTimeout(function(){ ta.focus(); }, 50);
+      function cerrar(poner){
+        var txt = ta.value.trim();
+        m.removeChild(d);
+        if(poner && txt){
+          trazos.push({c:color, g:grosor, tam:Math.round(Math.max(10, (18 + grosor*3) * k / z)), x:pt[0], y:pt[1], s:txt});
+          redibujar();
+        }
+        usarHerramienta(previa);
+      }
+      d.querySelector('[data-x="si"]').onclick = function(){ cerrar(true); };
+      d.querySelector('[data-x="no"]').onclick = function(){ cerrar(false); };
+    }
+    function usarHerramienta(h){
+      if(h !== 'texto') previa = h;
+      herramienta = h;
+      var b = m.querySelector('[data-h="'+h+'"]');
+      if(b) marcar('[data-h]', b);
+    }
     caja.addEventListener('wheel', function(ev){ ev.preventDefault(); zoomEn(z * (ev.deltaY < 0 ? 1.2 : 1/1.2), ev.clientX, ev.clientY); }, {passive:false});
 
     // ---------- botones
     function marcar(sel, b){ Array.prototype.forEach.call(m.querySelectorAll(sel), function(x){ x.classList.remove('on'); }); b.classList.add('on'); }
     Array.prototype.forEach.call(m.querySelectorAll('[data-c]'), function(b){ b.onclick = function(){ color = b.getAttribute('data-c'); marcar('[data-c]', b); }; });
     Array.prototype.forEach.call(m.querySelectorAll('[data-g]'), function(b){ b.onclick = function(){ grosor = +b.getAttribute('data-g'); marcar('[data-g]', b); }; });
-    Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(b){ b.onclick = function(){ herramienta = b.getAttribute('data-h'); marcar('[data-h]', b); }; });
+    Array.prototype.forEach.call(m.querySelectorAll('[data-h]'), function(b){ b.onclick = function(){ usarHerramienta(b.getAttribute('data-h')); }; });
     function centro(){ var r = caja.getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }
     m.querySelector('#eMas').onclick = function(){ var c = centro(); zoomEn(z*1.5, c[0], c[1]); };
     m.querySelector('#eMenos').onclick = function(){ var c = centro(); zoomEn(z/1.5, c[0], c[1]); };
