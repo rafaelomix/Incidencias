@@ -56,6 +56,13 @@
   .filtros{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
   .filtros button{border:1px solid var(--linea);background:#fff;border-radius:20px;padding:6px 12px;font-size:13px;white-space:nowrap}
   .filtros button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  /* botones de estado con su color */
+  .filtros button.f-ACTIVA{background:var(--activa-f);color:var(--activa);border-color:var(--activa);font-weight:600}
+  .filtros button.f-GESTIONADA{background:var(--gest-f);color:#b45309;border-color:var(--gest);font-weight:600}
+  .filtros button.f-TERMINADA{background:var(--term-f);color:var(--term);border-color:var(--term);font-weight:600}
+  .filtros button.f-ACTIVA.on{background:var(--activa);color:#fff}
+  .filtros button.f-GESTIONADA.on{background:var(--gest);color:#fff}
+  .filtros button.f-TERMINADA.on{background:var(--term);color:#fff}
   .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-top:8px}
   .fotos .f{position:relative;aspect-ratio:1;background:#e3e7ec;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--gris);font-size:12px}
   .fotos img{width:100%;height:100%;object-fit:cover;cursor:pointer}
@@ -470,7 +477,7 @@ function pintarIncidencias(){
   var c = {ACTIVA:0,GESTIONADA:0,TERMINADA:0};
   l.forEach(function(i){ c[i.estado]++; });
   var f = '<div class="filtros"><button class="'+(!S.filtro?'on':'')+'" onclick="filtrar(\'\')">Todas ('+l.length+')</button>';
-  ESTADOS.forEach(function(e){ f += '<button class="'+(S.filtro===e?'on':'')+'" onclick="filtrar(\''+e+'\')">'+NOM_EST[e]+' ('+c[e]+')</button>'; });
+  ESTADOS.forEach(function(e){ f += '<button class="f-'+e+(S.filtro===e?' on':'')+'" onclick="filtrar(\''+e+'\')">'+NOM_EST[e]+' ('+c[e]+')</button>'; });
   f += '</div>';
   var v = l.filter(function(i){ return !S.filtro || i.estado===S.filtro; });
   if(S.incConPiso){
@@ -505,7 +512,7 @@ function pisosConIncidencias(lista){
   orden.forEach(function(pr){
     var pisos = Object.keys(promos[pr]).map(function(k){ return promos[pr][k]; })
                       .sort(function(a,b){ return a.piso.localeCompare(b.piso,'es',{numeric:true}); });
-    if(S.incConPromo) h += '<div class="grupo">'+esc(pr)+' ('+pisos.length+' pisos)</div>';
+    if(S.incConPromo) h += '<div class="grupo">'+esc(pr)+' ('+pisos.length+(pisos.length===1?' piso':' pisos')+')</div>';
     pisos.forEach(function(x){
       var k = S.gruposPisos.length;
       S.gruposPisos.push({promocion:pr, piso:x.piso, pisoId:x.pisoId});

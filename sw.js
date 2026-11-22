@@ -1,6 +1,6 @@
 // Service worker de "Incidencias de obra": guarda la app en el móvil para que abra al instante.
 // Al subir un index.html nuevo, cambia VERSION para que todos los móviles lo cojan antes.
-var VERSION = 'inc-v4';
+var VERSION = 'inc-v5';
 var APP = ['./', 'index.html', 'manifest.json', 'icono.svg', 'icono-180.png', 'icono-192.png', 'icono-512.png'];
 
 self.addEventListener('install', function(e){
