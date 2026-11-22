@@ -96,7 +96,7 @@
 <script>
 // ======================= CONFIGURACIÓN =======================
 // Pega aquí la URL de tu script de Google (Implementar > Gestionar implementaciones), la que acaba en /exec
-var API_URL = 'https://script.google.com/macros/s/AKfycbyoBkNx1Iq5DIOuwCHrksKphfwh8cl7xxLPy6qK5PTY7g4m4mKX592hhXKp23umJ6w7/exec';
+var API_URL = 'PEGA_AQUI_LA_URL_DEL_SCRIPT/exec';
 
 // ======================= ESTADO Y UTILIDADES =======================
 var ESTADOS = ['ACTIVA','GESTIONADA','TERMINADA'];
@@ -135,7 +135,7 @@ function cargando(si, txt){ $('carga').style.display = si?'flex':'none'; $('carg
 function toast(t){ var e=$('toast'); e.textContent=t; e.style.display='block'; clearTimeout(e._t); e._t=setTimeout(function(){e.style.display='none';},3000); }
 function fallo(msg){ cargando(false); alert(msg); if(/Sesión no válida|PIN incorrecto/.test(msg)){ salir(); } }
 
-function guardarSesion(){ try{ localStorage.setItem('inc_ses', JSON.stringify(S.ses)); }catch(e){} }
+function guardarSesion(){ try{ localStorage.setItem('inc_ses', JSON.stringify({ nombre:S.ses.nombre, pin:S.ses.pin, usuario:S.usuario })); }catch(e){} }
 function leerSesion(){ try{ return JSON.parse(localStorage.getItem('inc_ses')||'null'); }catch(e){ return null; } }
 
 function chips(c, todos){
@@ -152,10 +152,11 @@ function cargarCon(clave, fn, args, pintarFn){
   var c = S.cache[clave];
   if(c) pintarFn(c); else cargando(true);
   return run.apply(null, [fn].concat(args)).then(function(r){
-    if(S.vista !== clave){ S.cache[clave] = r; return; }
+    if(S.vista !== clave){ S.cache[clave] = r; guardarCache(); return; }
     cargando(false);
     var cambia = !c || JSON.stringify(c) !== JSON.stringify(r);
     S.cache[clave] = r;
+    if(cambia) guardarCache();
     if(!cambia) return;
     var foco = document.activeElement;
     if(c && foco && /INPUT|TEXTAREA|SELECT/.test(foco.tagName)) return;   // no borrar lo que se está escribiendo
@@ -164,7 +165,29 @@ function cargarCon(clave, fn, args, pintarFn){
     if(c){ cargando(false); toast('No se pudo actualizar: '+m); } else fallo(m);
   });
 }
-function olvidar(){ S.cache = {}; }
+function olvidar(){ S.cache = {}; guardarCache(); }
+
+// La memoria se guarda también en el móvil: al abrir la app se ve al instante lo de la última vez
+var CLAVE_CACHE = 'inc_cache_v1';
+var tGuardar = null;
+function guardarCache(){
+  clearTimeout(tGuardar);
+  tGuardar = setTimeout(function(){
+    var datos = { usuario: S.ses ? S.ses.nombre : '', cache: S.cache };
+    try{ localStorage.setItem(CLAVE_CACHE, JSON.stringify(datos)); }
+    catch(e){   // sin espacio: se guardan solo los listados
+      var ligero = {};
+      Object.keys(S.cache).forEach(function(k){ if(k.indexOf('ver:') !== 0) ligero[k] = S.cache[k]; });
+      try{ localStorage.setItem(CLAVE_CACHE, JSON.stringify({ usuario: datos.usuario, cache: ligero })); }catch(e2){}
+    }
+  }, 300);
+}
+function leerCache(nombre){
+  try{
+    var d = JSON.parse(localStorage.getItem(CLAVE_CACHE) || 'null');
+    return d && d.usuario === nombre ? d.cache || {} : {};
+  }catch(e){ return {}; }
+}
 function refrescarTodo(){ olvidar(); S.forzar = true; recargar(); }
 
 // ======================= NAVEGACIÓN =======================
@@ -183,11 +206,22 @@ function pintar(){
 function recargar(){ pintar(); }
 
 // ======================= ENTRADA =======================
+// Si ya había sesión se entra directamente, sin esperar a Google: la primera petición
+// (el listado de promociones) ya comprueba el usuario y el PIN.
 function inicio(){
   var s = leerSesion();
-  if(s){
+  if(s && s.usuario){
+    S.ses = { nombre:s.nombre, pin:s.pin };
+    S.usuario = s.usuario;
+    S.cache = leerCache(s.nombre);
+    entrar();
+    // en paralelo se comprueba el usuario (por si le han cambiado el PIN o el rol)
+    run('login', S.ses).then(function(u){
+      if(u.rol !== S.usuario.rol){ S.usuario = u; guardarSesion(); entrar(); }
+    }).catch(function(m){ if(/PIN incorrecto|Sesión no válida|intentos/.test(m)){ alert(m); salir(); } });
+  } else if(s){
     cargando(true);
-    run('login', s).then(function(u){ S.ses=s; S.usuario=u; cargando(false); entrar(); })
+    run('login', s).then(function(u){ S.ses=s; S.usuario=u; guardarSesion(); cargando(false); entrar(); })
                    .catch(function(){ cargando(false); pantallaLogin(); });
   } else pantallaLogin();
 }
@@ -206,11 +240,11 @@ function pantallaLogin(){
 function hacerLogin(){
   var s = { nombre:$('lnom').value, pin:$('lpin').value };
   cargando(true);
-  run('login', s).then(function(u){ S.ses=s; S.usuario=u; guardarSesion(); cargando(false); entrar(); })
+  run('login', s).then(function(u){ S.ses=s; S.usuario=u; S.cache = leerCache(s.nombre); guardarSesion(); cargando(false); entrar(); })
                  .catch(function(m){ cargando(false); alert(m); });
 }
 
-function salir(){ try{ localStorage.removeItem('inc_ses'); }catch(e){} S.ses=null; S.usuario=null; S.pila=[]; pantallaLogin(); }
+function salir(){ try{ localStorage.removeItem('inc_ses'); localStorage.removeItem(CLAVE_CACHE); }catch(e){} S.ses=null; S.usuario=null; S.cache={}; S.pila=[]; pantallaLogin(); }
 
 function entrar(){
   $('usr').innerHTML = esc(S.usuario.nombre)+'<br>'+esc(S.usuario.rol)+' · <a href="#" style="color:#fff" onclick="salir();return false">salir</a>';
@@ -230,19 +264,28 @@ function pintarPromociones(r){
     var h = '';
     if(r.aviso) h += '<div class="aviso">'+esc(r.aviso)+'</div>';
     h += '<input id="buscar" placeholder="Buscar promoción..." oninput="filtrarPromos()" style="margin-bottom:10px">';
-    if(esAdmin()) h += '<div class="fila" style="margin-bottom:10px"><button class="btn sec" onclick="abrirTodas()">Todas las incidencias</button></div>';
+    if(esAdmin()){
+      var nArch = r.promociones.filter(function(p){ return p.info && p.info.archivada; }).length;
+      h += '<div class="fila" style="margin-bottom:10px"><button class="btn sec" onclick="abrirTodas()">Todas las incidencias</button>'+
+           (nArch ? '<button class="btn sec" onclick="verArchivadas()">'+(S.verArchivadas?'Ocultar archivadas':'&#128230; Ver archivadas ('+nArch+')')+'</button>' : '')+'</div>';
+    }
     h += '<div id="listaPromos"></div>';
     $('app').innerHTML = h;
     $('buscar').value = q;
     filtrarPromos();
 }
 
+function verArchivadas(){ S.verArchivadas = !S.verArchivadas; pintarPromociones(S.cache['promos'] || {promociones:S.listaPromos}); }
+
 function filtrarPromos(){
   var q = ($('buscar').value||'').toLowerCase();
-  var l = S.listaPromos.filter(function(p){ return !q || (p.nombre+' '+(p.info.codigo||'')).toLowerCase().indexOf(q)>=0; });
+  var l = S.listaPromos.filter(function(p){
+    if(p.info.archivada && !S.verArchivadas) return false;      // las archivadas no se ven
+    return !q || (p.nombre+' '+(p.info.codigo||'')).toLowerCase().indexOf(q)>=0;
+  });
   $('listaPromos').innerHTML = l.length ? l.map(function(p,i){
-    return '<div class="card item" onclick="abrirPromo(\''+p.id+'\')">'+
-      '<div class="grow"><div class="tit">'+esc(p.nombre)+'</div>'+
+    return '<div class="card item" '+(p.info.archivada?'style="opacity:.6;background:#eceff3" ':'')+'onclick="abrirPromo(\''+p.id+'\')">'+
+      '<div class="grow"><div class="tit">'+(p.info.archivada?'&#128230; ':'')+esc(p.nombre)+'</div>'+
       '<div class="sub">'+(p.info.codigo?'Obra '+esc(p.info.codigo)+' · ':'')+(p.info.jefe?esc(p.info.jefe):'')+'</div>'+
       '<div style="margin-top:6px">'+chips(p.cuentas)+'</div></div><div>&#8250;</div></div>';
   }).join('') : '<div class="vacio">No hay promociones.</div>';
@@ -295,9 +338,15 @@ function pintarPromo(p){
            '<div class="sub" style="margin-top:6px">Ubicación</div><div class="fila">'+(mapa||'—')+'</div>'+
            (i.notas?'<div class="sub" style="margin-top:6px">Notas</div><div>'+nl(i.notas)+'</div>':'');
     }
-    h += '</details></div>';
-    h += '<div class="card"><div class="tit">Incidencias de la promoción</div><div style="margin-top:6px">'+chips(p.cuentas,true)+'</div>'+
-         '<div style="margin-top:8px"><button class="btn sec peq" onclick="abrirIncPromo()">Ver todas las de esta promoción</button></div></div>';
+    h += '</details>';
+    if(esAdmin()){
+      h += '<div style="margin-top:10px;border-top:1px solid var(--linea);padding-top:10px">'+
+           (i.archivada
+             ? '<div class="sub" style="margin-bottom:6px">&#128230; Esta promoción está archivada (oculta para los demás usuarios).</div>'+
+               '<button class="btn sec peq" onclick="archivarPromo(false)">Desarchivar</button>'
+             : '<button class="btn sec peq" onclick="archivarPromo(true)">&#128230; Archivar promoción</button>')+'</div>';
+    }
+    h += '</div>';
     h += '<h3 style="margin:16px 4px 8px">Pisos ('+p.pisos.length+')</h3><div id="filtroPisos"></div><div id="listaPisos"></div>';
     $('app').innerHTML = h;
     pintarPisos();
@@ -319,7 +368,7 @@ function pasaFiltroPiso(c, f){
   return colorPiso(c) === f;
 }
 function botonesFiltroPisos(lista, fnCuentas, alPulsar){
-  var opc = [['','Todos'],['CON','Con incidencias'],['ACTIVA','&#128308; Rojo'],['GESTIONADA','&#128992; Naranja'],['TERMINADA','&#128994; Verde'],['SIN','Sin incidencias']];
+  var opc = [['','Todos'],['CON','Con incidencias'],['ACTIVA','&#128308; Activa'],['GESTIONADA','&#128992; Gestionada'],['TERMINADA','&#128994; Terminada'],['SIN','Sin incidencias']];
   return '<div class="filtros">'+opc.map(function(o){
     var n = lista.filter(function(x){ return pasaFiltroPiso(fnCuentas(x), o[0]); }).length;
     return '<button class="'+(S.filtroPisos===o[0]?'on':'')+'" onclick="'+alPulsar+'(\''+o[0]+'\')">'+o[1]+' ('+n+')</button>';
@@ -336,6 +385,18 @@ function pintarPisos(){
          '<div class="grow"><div class="tit">'+esc(x.nombre)+'</div><div style="margin-top:4px">'+chips(x.cuentas)+'</div></div><div>&#8250;</div></div>';
   });
   $('listaPisos').innerHTML = h || '<div class="vacio">'+(p.pisos.length?'Ningún piso en este filtro.':'No hay planos (PDF) en esta carpeta.')+'</div>';
+}
+
+// Archivar: la promoción deja de verse en el listado (los demás usuarios no la ven nunca)
+function archivarPromo(archivar){
+  var nombre = S.promo.nombre;
+  if(archivar && !confirm('¿Archivar "'+nombre+'"?\n\nDejará de aparecer en el listado de promociones y en "Todas las incidencias". No se borra nada: se puede desarchivar en cualquier momento.')) return;
+  cargando(true, archivar ? 'Archivando...' : 'Desarchivando...');
+  run('archivarPromocion', S.ses, nombre, archivar).then(function(){
+    cargando(false); olvidar();
+    toast(archivar ? 'Promoción archivada' : 'Promoción recuperada');
+    if(archivar){ S.pila.pop(); pintar(); } else recargar();
+  }).catch(fallo);
 }
 
 function miUbicacion(){
@@ -963,6 +1024,11 @@ function marcarPlano(idPdf, alTerminar){
     cargando(false);
     if(imagen) editorFoto(imagen, alTerminar, LADO_PLANO);
   }).catch(function(m){ fallo(typeof m === 'string' ? m : (m && m.message) || 'No se pudo abrir el plano.'); });
+}
+
+// Guarda la propia app (y el visor de PDF) en el móvil para que abra al instante
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
 }
 
 inicio();
